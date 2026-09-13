@@ -1,0 +1,9 @@
+.git
+.gitignore
+.manus-logs
+.env
+.env.*
+node_modules
+dist
+npm-debug.log*
+pnpm-debug.log*

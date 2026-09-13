@@ -25,6 +25,24 @@ pnpm check
 pnpm build
 ```
 
+## Execução com Docker
+
+Com Docker e Docker Compose instalados, execute:
+
+```bash
+docker compose up --build
+```
+
+A aplicação ficará disponível em <http://localhost:3001>. Para usar
+outra porta, defina `APP_PORT` antes do comando (por exemplo,
+`APP_PORT=8080 docker compose up --build`).
+
+Para encerrar:
+
+```bash
+docker compose down
+```
+
 ## Modo mosaico
 
 Abra **Monitoramento ao vivo**, selecione os veículos usando os checkboxes na árvore e ative **Mosaico**. A ação **Abrir em tela** abre uma parede de monitoramento independente em uma nova janela, que pode ser movida para uma TV ou monitor adicional.
