@@ -13,6 +13,7 @@ import { renderToString } from "react-dom/server";
 (globalThis as any).window = { localStorage: undefined, setTimeout, clearTimeout };
 
 const { ProfileWorkspace, useConfiguracoes } = await import("./client/src/pages/risk/views/perfil/ProfileWorkspace");
+const { ProfileInspector } = await import("./client/src/pages/risk/views/perfil/ProfileInspector");
 const { VehicleNavigator } = await import("./client/src/pages/risk/views/perfil/VehicleNavigator");
 const { configuracoesIniciais } = await import("./client/src/pages/risk/domain");
 type Config = (typeof configuracoesIniciais)[number];
@@ -23,9 +24,9 @@ const falhar = (msg: string) => { console.log("  FALHA:", msg); ok = false; };
 function render(configs: Config[], rotulo: string, esperaNos = true) {
   try {
     const html = renderToString(createElement(ProfileWorkspace as any, {
-      configs, setConfigs: () => {}, busca: "", onLimparBusca: () => {}, onToast: () => {}, VehicleNavigator,
+      configs, setConfigs: () => {}, busca: "", onBusca: () => {}, onLimparBusca: () => {}, onToast: () => {}, VehicleNavigator,
     }));
-    const marcadores = ["Sequência de macros", "Revisar e embarcar", "wsp-inspetor", ...(esperaNos ? ["wsp-no"] : [])];
+    const marcadores = ["Revisar e embarcar", "wsp-corpo", "wsp-nav", "wsp-canvas", ...(esperaNos ? ["wsp-no"] : [])];
     const faltando = marcadores.filter((m) => !html.includes(m));
     if (faltando.length) return falhar(`[${rotulo}] não renderizou ${faltando.join(", ")}`);
     console.log(`  ok [${rotulo}] ${html.length} chars`);
@@ -40,6 +41,29 @@ render([configuracoesIniciais[3]], "veículo com embarque parcial");
 render([configuracoesIniciais[4]], "veículo nunca embarcado");
 render([{ ...configuracoesIniciais[0], transicoes: [] }], "grafo sem transições");
 render([{ ...configuracoesIniciais[0], macros: [], transicoes: [], macroVigente: null }], "sem macros", false);
+
+// O inspetor abre sob demanda, entao nao aparece no render inicial do workspace.
+// Testado isolado, com cada tipo de seleção — inclusive as funções de jornada e
+// logística, que sao da macro e nao do perfil.
+function renderInspetor(selecao: any, rotulo: string, marcadores: string[]) {
+  try {
+    const html = renderToString(createElement(ProfileInspector as any, {
+      config: configuracoesIniciais[0], selecao, aba: "estado", validacoes: [],
+      onAba: () => {}, onFechar: () => {}, onPatchPerfil: () => {}, onPatchMacro: () => {},
+      onRemoverMacro: () => {}, onRemoverTransicao: () => {},
+    }));
+    const faltando = marcadores.filter((m) => !html.includes(m));
+    if (faltando.length) return falhar(`[inspetor ${rotulo}] não renderizou ${faltando.join(", ")}`);
+    console.log(`  ok [inspetor ${rotulo}] ${html.length} chars`);
+  } catch (e) {
+    falhar(`[inspetor ${rotulo}] ${(e as Error).message}`);
+  }
+}
+
+const macroComAsDuas = configuracoesIniciais[0].macros.find((m) => m.funcaoJornada && m.funcaoLogistica)!;
+renderInspetor({ tipo: "macro", id: macroComAsDuas.id }, "macro com jornada e logística", ["Função de jornada", "Função de logística", "wsp-inspetor"]);
+renderInspetor({ tipo: "padrao" }, "perfil padrão", ["wsp-inspetor"]);
+renderInspetor({ tipo: "transicao", de: configuracoesIniciais[0].transicoes[0].de, para: configuracoesIniciais[0].transicoes[0].para }, "transição", ["Remover transição"]);
 
 // O caso que quebrou em uso: localStorage com a forma ANTIGA da configuração.
 // `useStoredState` tem de descartar e cair no inicial, em vez de devolver um

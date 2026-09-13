@@ -1,25 +1,34 @@
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, HelpCircle, Trash2 } from "lucide-react";
+import { AlertTriangle, BellRing, Camera, ChevronDown, ChevronRight, Radio, Trash2, Volume2, X } from "lucide-react";
 import { Toggle } from "../../shared";
 import {
-  acionamentoLabel, atuadorLabel, estadosSensor, estadosSensorKeys, posturaLabel, sensorLabel,
-  type Atuador, type ConfigAtuador, type ConfiguracaoVeiculo, type MacroVeiculo, type ModoAcionamento, type PerfilOperacional, type PosturaAtuador, type Sensor, type Validacao,
+  acoesPadrao, acionamentoLabel, atuadorLabel, canalEnvioLabel, catalogoRegras, estadosSensor, estadosSensorKeys, funcaoJornadaLabel, funcaoLogisticaLabel, funcoesJornada, funcoesLogistica, posturaLabel, sensorLabel,
+  type Atuador, type CanalEnvio, type ConfigAtuador, type ConfiguracaoAcoes, type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type ModoAcionamento, type PerfilOperacional, type PosturaAtuador, type Validacao,
 } from "../../domain";
 import type { SelecaoGrafo } from "./MacroGraphCanvas";
 
 const posturas: PosturaAtuador[] = ["ligado", "desligado"];
 const modos: ModoAcionamento[] = ["temporario", "permanente"];
 const atuadores = Object.keys(atuadorLabel) as Atuador[];
+const canais = Object.keys(canalEnvioLabel) as CanalEnvio[];
 
-export type AbaInspetor = "atuadores" | "sensores" | "contingencia";
+export type AbaInspetor = "estado" | "regras" | "acoes" | "contingencia";
+type EditorProps = { perfil: PerfilOperacional; onPatchPerfil: (d: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void };
 
-export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onPatchPerfil, onRemoverMacro, onRemoverTransicao }: {
+const acoesDoPerfil = (perfil: PerfilOperacional): ConfiguracaoAcoes => {
+  const padrao = acoesPadrao();
+  return { ...padrao, ...perfil.acoes, camera: { ...padrao.camera, ...perfil.acoes?.camera } };
+};
+
+export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFechar, onPatchPerfil, onPatchMacro, onRemoverMacro, onRemoverTransicao }: {
   config: ConfiguracaoVeiculo;
   selecao: SelecaoGrafo;
   aba: AbaInspetor;
   validacoes: Validacao[];
   onAba: (a: AbaInspetor) => void;
+  onFechar: () => void;
   onPatchPerfil: (descricao: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void;
+  onPatchMacro: (descricao: string, fn: (m: MacroVeiculo) => MacroVeiculo) => void;
   onRemoverMacro: (macro: MacroVeiculo) => void;
   onRemoverTransicao: (de: string, para: string) => void;
 }) {
@@ -27,240 +36,137 @@ export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onPa
     const de = config.macros.find((m) => m.id === selecao.de);
     const para = config.macros.find((m) => m.id === selecao.para);
     return <aside className="wsp-inspetor" aria-label="Transição selecionada">
-      <header className="wsp-inspetor-head">
-        <div>
-          <p className="wsp-inspetor-tipo">Transição</p>
-          <h2>{de?.nome} → {para?.nome}</h2>
-          <p className="wsp-inspetor-sub">Estando em “{de?.nome}”, o motorista pode registrar “{para?.nome}”.</p>
-        </div>
-      </header>
-      <div className="wsp-inspetor-corpo">
-        <p className="wsp-ajuda">O equipamento recusa qualquer transição que não esteja no grafo, independentemente do que o app tenha apresentado.</p>
-      </div>
-      <footer className="wsp-inspetor-rodape">
-        <button className="wsp-btn perigo" onClick={() => onRemoverTransicao(selecao.de, selecao.para)}><Trash2 size={14} /> Remover transição</button>
-      </footer>
+      <header className="wsp-inspetor-head"><div>
+        <p className="wsp-inspetor-tipo">Transição permitida</p>
+        <h2>{de?.nome} → {para?.nome}</h2>
+        <p className="wsp-inspetor-sub">Estando em “{de?.nome}”, o motorista pode registrar “{para?.nome}”.</p>
+      </div><button className="wsp-inspetor-fechar" onClick={onFechar} aria-label="Fechar editor"><X size={15} /></button></header>
+      <div className="wsp-inspetor-corpo"><p className="wsp-ajuda">As setas definem os próximos estados aceitos pelo equipamento. Qualquer transição fora do grafo será recusada.</p></div>
+      <footer className="wsp-inspetor-rodape"><button className="wsp-btn perigo" onClick={() => onRemoverTransicao(selecao.de, selecao.para)}><Trash2 size={14} /> Remover transição</button></footer>
     </aside>;
   }
 
   const macro = selecao.tipo === "macro" ? config.macros.find((m) => m.id === selecao.id) ?? null : null;
   const perfil = macro ? macro.perfil : config.perfilPadrao;
   const doItem = validacoes.filter((v) => macro ? v.macroId === macro.id : !v.macroId);
+  const abas: { id: AbaInspetor; label: string }[] = [
+    { id: "estado", label: "Postura" },
+    { id: "regras", label: "Detecção" },
+    { id: "acoes", label: "Reação" },
+    { id: "contingencia", label: "Contingência" },
+  ];
 
-  return <aside className="wsp-inspetor" aria-label="Perfil selecionado">
-    <header className="wsp-inspetor-head">
-      <div>
-        <p className="wsp-inspetor-tipo">{macro ? (macro.tipo === "inicio" ? "Macro · início" : macro.tipo === "fim" ? "Macro · fim" : "Macro") : "Perfil padrão do veículo"}</p>
-        <h2>{macro ? macro.nome : "Nenhuma macro em curso"}</h2>
-        <input
-          className="wsp-inspetor-nome" value={perfil.nome} aria-label="Nome do perfil"
-          onChange={(e) => onPatchPerfil(`Perfil renomeado para “${e.target.value}”`, (p) => ({ ...p, nome: e.target.value }))}
-        />
-      </div>
-      <nav className="wsp-abas" role="tablist" aria-label="Seções do perfil">
-        {(["atuadores", "sensores", "contingencia"] as AbaInspetor[]).map((id) => (
-          <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? "ativa" : ""} onClick={() => onAba(id)}>
-            {id === "atuadores" ? "Atuadores" : id === "sensores" ? "Sensores" : "Contingência"}
-          </button>
-        ))}
-      </nav>
-    </header>
+  return <aside className="wsp-inspetor" aria-label="Editor da macro selecionada">
+    <header className="wsp-inspetor-head"><div>
+      <p className="wsp-inspetor-tipo">{macro ? `Macro · ${macro.tipo === "inicio" ? "início" : macro.tipo === "fim" ? "fim" : "operação"}` : "Perfil padrão do veículo"}</p>
+      <h2>{macro ? macro.nome : "Nenhuma macro em curso"}</h2>
+      <p className="wsp-inspetor-sub">{macro?.descricao ?? "Configuração aplicada quando nenhuma macro está ativa."}</p>
+      <label className="wsp-inspetor-perfil"><span>Perfil ativado</span><input className="wsp-inspetor-nome" value={perfil.nome} aria-label="Nome do perfil" onChange={(e) => onPatchPerfil(`Perfil renomeado para “${e.target.value}”`, (p) => ({ ...p, nome: e.target.value }))} /></label>
+      {macro ? <div className="wsp-funcoes">
+        <label><span>Função de jornada</span>
+          <select value={macro.funcaoJornada ?? ""} onChange={(e) => onPatchMacro(`${macro.nome}: jornada ${e.target.value ? funcaoJornadaLabel[e.target.value as FuncaoJornada].toLowerCase() : "não alterada"}`, (m) => ({ ...m, funcaoJornada: (e.target.value || null) as FuncaoJornada | null }))}>
+            <option value="">Não altera a jornada</option>
+            {funcoesJornada.map((f) => <option key={f} value={f}>{funcaoJornadaLabel[f]}</option>)}
+          </select>
+        </label>
+        <label><span>Função de logística</span>
+          <select value={macro.funcaoLogistica ?? ""} onChange={(e) => onPatchMacro(`${macro.nome}: logística ${e.target.value ? funcaoLogisticaLabel[e.target.value as FuncaoLogistica].toLowerCase() : "não alterada"}`, (m) => ({ ...m, funcaoLogistica: (e.target.value || null) as FuncaoLogistica | null }))}>
+            <option value="">Não altera a viagem</option>
+            {funcoesLogistica.map((f) => <option key={f} value={f}>{funcaoLogisticaLabel[f]}</option>)}
+          </select>
+        </label>
+        <p className="wsp-ajuda menor">O motorista não inicia jornada nem viagem diretamente: ele registra esta macro, e são estas funções que movem cada máquina. O fim de um estado é a macro seguinte.</p>
+      </div> : null}
+    </div><button className="wsp-inspetor-fechar" onClick={onFechar} aria-label="Fechar editor"><X size={15} /></button>
+    <nav className="wsp-abas" role="tablist" aria-label="Configurações da macro">{abas.map(({ id, label }) => <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? "ativa" : ""} onClick={() => onAba(id)}>{label}</button>)}</nav></header>
 
     <div className="wsp-inspetor-corpo">
-      {doItem.length ? <div className="wsp-inspetor-alertas">{doItem.map((v, i) => (
-        <p key={i} className={v.nivel === "erro" ? "erro" : "aviso"}><AlertTriangle size={13} /> {v.mensagem}</p>
-      ))}</div> : null}
-
-      {aba === "atuadores" ? <ActuatorList perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
-      {aba === "sensores" ? <SensorList perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {doItem.length ? <div className="wsp-inspetor-alertas">{doItem.map((v, i) => <p key={i} className={v.nivel === "erro" ? "erro" : "aviso"}><AlertTriangle size={13} /> {v.mensagem}</p>)}</div> : null}
+      {aba === "estado" ? <InitialStateSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {aba === "regras" ? <RulesSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {aba === "acoes" ? <ActionSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
       {aba === "contingencia" ? <ContingencySettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
     </div>
 
-    {macro ? <footer className="wsp-inspetor-rodape">
-      <span className="wsp-inspetor-rodape-info">{macro.descricao}</span>
-      <button className="wsp-btn perigo" onClick={() => onRemoverMacro(macro)}><Trash2 size={14} /> Remover macro</button>
-    </footer> : <footer className="wsp-inspetor-rodape">
-      <span className="wsp-inspetor-rodape-info">Vale quando nenhuma macro está em curso, e é restaurado pela limpeza da política embarcada.</span>
-    </footer>}
+    {macro ? <footer className="wsp-inspetor-rodape"><span className="wsp-inspetor-rodape-info">As alterações entram no próximo embarque deste veículo.</span><button className="wsp-btn perigo" onClick={() => onRemoverMacro(macro)}><Trash2 size={14} /> Remover macro</button></footer>
+      : <footer className="wsp-inspetor-rodape"><span className="wsp-inspetor-rodape-info">Este perfil volta a valer ao encerrar a sequência de macros.</span></footer>}
   </aside>;
 }
 
-// ------------------------------------------------------------------ Atuadores
-
-export function ActuatorList({ perfil, onPatchPerfil }: { perfil: PerfilOperacional; onPatchPerfil: (d: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void }) {
-  const [aberto, setAberto] = useState<Atuador | null>(null);
-
-  const patch = (atuador: Atuador, descricao: string, fn: (a: ConfigAtuador) => ConfigAtuador) =>
-    onPatchPerfil(descricao, (p) => ({ ...p, atuadores: { ...p.atuadores, [atuador]: fn(p.atuadores[atuador]) } }));
-
-  const aplicarPosturaATodos = (postura: PosturaAtuador) => onPatchPerfil(`Todos os atuadores em “${posturaLabel[postura]}”`, (p) => ({
-    ...p,
-    atuadores: Object.fromEntries(atuadores.map((a) => [a, { ...p.atuadores[a], postura }])) as Record<Atuador, ConfigAtuador>,
-  }));
-
+function InitialStateSettings({ perfil, onPatchPerfil }: EditorProps) {
+  const aplicarTodos = (postura: PosturaAtuador) => onPatchPerfil(`Todos os atuadores em “${posturaLabel[postura]}”`, (p) => ({ ...p, atuadores: Object.fromEntries(atuadores.map((a) => [a, { ...p.atuadores[a], postura }])) as Record<Atuador, ConfigAtuador> }));
   return <>
-    <div className="wsp-secao-topo">
-      <p className="wsp-ajuda">
-        Assumir este perfil define o estado de <strong>todos</strong> os atuadores — inclusive os desligados.
-        <Dica texto="Não existe “manter como estava”: sem a postura absoluta sobraria resíduo do modo anterior e o estado deixaria de ser conhecido." />
-      </p>
-      <div className="wsp-aplicar-todos">
-        Aplicar a todos:
-        {posturas.map((p) => <button key={p} className="wsp-link" onClick={() => aplicarPosturaATodos(p)}>{posturaLabel[p]}</button>)}
-      </div>
-    </div>
-
-    <ul className="wsp-lista">{atuadores.map((atuador) => {
-      const a = perfil.atuadores[atuador];
-      const expandido = aberto === atuador;
-      return <li key={atuador} className={`wsp-item ${expandido ? "aberto" : ""}`}>
-        <button className="wsp-item-head" aria-expanded={expandido} onClick={() => setAberto(expandido ? null : atuador)}>
-          {expandido ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <span className="wsp-item-nome">{atuadorLabel[atuador]}</span>
-          <span className="wsp-item-resumo">
-            <span className={`wsp-pill ${a.postura === "ligado" ? "on" : ""}`}>{posturaLabel[a.postura]}</span>
-            <span className="wsp-pill">{acionamentoLabel[a.acionamento]}{a.acionamento === "temporario" ? ` ${a.duracaoSeg}s` : ""}</span>
-            {a.liberavelPeloMotorista ? <span className="wsp-pill motorista">motorista{a.limiteAcionamentos ? ` ·${a.limiteAcionamentos}x` : ""}{a.exigeAutenticacao ? " ·senha" : ""}</span> : null}
-          </span>
-        </button>
-
-        {expandido ? <div className="wsp-item-corpo">
-          <Campo rotulo="Postura ao entrar no perfil">
-            <Segmentado
-              opcoes={posturas.map((p) => ({ id: p, label: posturaLabel[p] }))} valor={a.postura}
-              onChange={(v) => patch(atuador, `${atuadorLabel[atuador]}: postura ${posturaLabel[v as PosturaAtuador]}`, (c) => ({ ...c, postura: v as PosturaAtuador }))}
-            />
-          </Campo>
-
-          <Campo rotulo="Quando uma violação aciona">
-            <Segmentado
-              opcoes={modos.map((m) => ({ id: m, label: acionamentoLabel[m] }))} valor={a.acionamento}
-              onChange={(v) => patch(atuador, `${atuadorLabel[atuador]}: acionamento ${acionamentoLabel[v as ModoAcionamento]}`, (c) => ({ ...c, acionamento: v as ModoAcionamento }))}
-            />
-            {a.acionamento === "temporario"
-              ? <label className="wsp-campo-inline">Encerra sozinho em
-                  <input type="number" min={1} value={a.duracaoSeg} onChange={(e) => patch(atuador, `${atuadorLabel[atuador]}: duração ${e.target.value}s`, (c) => ({ ...c, duracaoSeg: Number(e.target.value) }))} /> s
-                </label>
-              : <ul className="wsp-condicoes"><li>a violação cessou</li><li><strong>e</strong> a central comandou o encerramento</li></ul>}
-          </Campo>
-
-          <Campo rotulo="Motorista pode acionar">
-            <Toggle
-              checked={a.liberavelPeloMotorista}
-              onChange={(next) => patch(atuador, `${atuadorLabel[atuador]}: ${next ? "liberável pelo motorista" : "só pela central"}`, (c) => ({ ...c, liberavelPeloMotorista: next, limiteAcionamentos: next ? c.limiteAcionamentos : null, exigeAutenticacao: next ? c.exigeAutenticacao : false }))}
-              label={a.liberavelPeloMotorista ? "Botão liberável na cabine" : "Só pela central"}
-            />
-            {a.liberavelPeloMotorista ? <div className="wsp-sub-campos">
-              <label className="wsp-campo-inline">Limite
-                <input type="number" min={0} value={a.limiteAcionamentos ?? 0} onChange={(e) => { const n = Number(e.target.value); patch(atuador, `${atuadorLabel[atuador]}: limite ${n || "sem limite"}`, (c) => ({ ...c, limiteAcionamentos: n > 0 ? n : null })); }} />
-                {a.limiteAcionamentos ? "acionamentos" : "= sem limite"}
-              </label>
-              <Toggle checked={a.exigeAutenticacao} onChange={(next) => patch(atuador, `${atuadorLabel[atuador]}: ${next ? "exige credencial" : "sem credencial"}`, (c) => ({ ...c, exigeAutenticacao: next }))} label="Exige credencial do motorista" />
-              <p className="wsp-ajuda menor">Esgotado o limite, só um novo embarque restaura a permissão.</p>
-            </div> : null}
-          </Campo>
-        </div> : null}
-      </li>;
-    })}</ul>
+    <SectionIntro title="Estado inicial dos atuadores">Ao entrar nesta macro, o equipamento assume estes estados imediatamente.</SectionIntro>
+    <div className="wsp-aplicar-todos">Aplicar a todos: {posturas.map((p) => <button key={p} className="wsp-link" onClick={() => aplicarTodos(p)}>{posturaLabel[p]}</button>)}</div>
+    <ul className="wsp-lista">{atuadores.map((atuador) => <li key={atuador} className="wsp-item simples"><div className="wsp-item-head estatico"><span className="wsp-item-nome">{atuadorLabel[atuador]}</span><Segmentado opcoes={posturas.map((p) => ({ id: p, label: posturaLabel[p] }))} valor={perfil.atuadores[atuador].postura} onChange={(v) => onPatchPerfil(`${atuadorLabel[atuador]} inicia ${posturaLabel[v as PosturaAtuador].toLowerCase()}`, (p) => ({ ...p, atuadores: { ...p.atuadores, [atuador]: { ...p.atuadores[atuador], postura: v as PosturaAtuador } } }))} /></div></li>)}</ul>
   </>;
 }
 
-// ------------------------------------------------------------------- Sensores
-
-export function SensorList({ perfil, onPatchPerfil }: { perfil: PerfilOperacional; onPatchPerfil: (d: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void }) {
+function RulesSettings({ perfil, onPatchPerfil }: EditorProps) {
   return <>
-    <p className="wsp-ajuda">
-      O mesmo sensor muda de significado conforme o perfil.
-      <Dica texto="Porta do baú aberta é normal no cliente e violação em viagem — por isso o estado que conta como violação é escolhido aqui, e não fixado no sensor." />
-    </p>
-
+    <SectionIntro title="Sensores e regras de violação">Arme sensores físicos e complemente a política com regras do catálogo.</SectionIntro>
+    <p className="wsp-grupo-titulo">Sensores do equipamento</p>
     <ul className="wsp-lista">{estadosSensorKeys.map((sensor) => {
       const s = perfil.sensores.find((x) => x.sensor === sensor);
       const armado = Boolean(s?.armado);
       return <li key={sensor} className="wsp-item simples">
-        <div className="wsp-item-head estatico">
-          <span className="wsp-item-nome">{sensorLabel[sensor]}</span>
-          <Toggle checked={armado} onChange={(next) => onPatchPerfil(`${sensorLabel[sensor]} ${next ? "armado" : "desarmado"}`, (p) => ({
-            ...p,
-            sensores: p.sensores.some((x) => x.sensor === sensor)
-              ? p.sensores.map((x) => x.sensor === sensor ? { ...x, armado: next } : x)
-              : [...p.sensores, { sensor, armado: next, estadoViolacao: estadosSensor[sensor][0] }],
-            contingencia: next ? p.contingencia : { ...p.contingencia, sensores: p.contingencia.sensores.filter((x) => x !== sensor) },
-          }))} label={armado ? "Armado" : "Desarmado"} />
-        </div>
-        {armado ? <div className="wsp-item-corpo sem-borda">
-          <Campo rotulo="Estado que conta como violação">
-            <select value={s?.estadoViolacao} onChange={(e) => onPatchPerfil(`${sensorLabel[sensor]}: violação = ${e.target.value}`, (p) => ({ ...p, sensores: p.sensores.map((x) => x.sensor === sensor ? { ...x, estadoViolacao: e.target.value } : x) }))}>
-              {estadosSensor[sensor].map((estado) => <option key={estado} value={estado}>{estado}</option>)}
-            </select>
-          </Campo>
-        </div> : null}
+        <div className="wsp-item-head estatico"><span className="wsp-item-nome">{sensorLabel[sensor]}</span><Toggle checked={armado} onChange={(next) => onPatchPerfil(`${sensorLabel[sensor]} ${next ? "armado" : "desarmado"}`, (p) => ({ ...p, sensores: p.sensores.some((x) => x.sensor === sensor) ? p.sensores.map((x) => x.sensor === sensor ? { ...x, armado: next } : x) : [...p.sensores, { sensor, armado: next, estadoViolacao: estadosSensor[sensor][0] }], contingencia: next ? p.contingencia : { ...p.contingencia, sensores: p.contingencia.sensores.filter((x) => x !== sensor) } }))} label={armado ? "Armado" : "Desarmado"} /></div>
+        {armado ? <div className="wsp-item-corpo sem-borda"><Campo rotulo="Conta como violação quando"><select value={s?.estadoViolacao} onChange={(e) => onPatchPerfil(`${sensorLabel[sensor]}: violação = ${e.target.value}`, (p) => ({ ...p, sensores: p.sensores.map((x) => x.sensor === sensor ? { ...x, estadoViolacao: e.target.value } : x) }))}>{estadosSensor[sensor].map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></Campo></div> : null}
       </li>;
     })}</ul>
 
-    <div className="wsp-bloco">
-      <div className="wsp-bloco-head">
-        <span>Latch de violação</span>
-        <Toggle checked={perfil.latchViolacao} onChange={(next) => onPatchPerfil(`Latch ${next ? "ativado" : "desativado"}`, (p) => ({ ...p, latchViolacao: next }))} label={perfil.latchViolacao ? "Ativo" : "Desligado"} />
-      </div>
-      <p className="wsp-ajuda menor">
-        {perfil.latchViolacao ? "Depois de reagir a uma violação, só volta a reagir quando o perfil trocar." : "Reage a cada violação, mesmo repetida."}
-        <Dica texto="Sem o latch, um sensor oscilando na fronteira — porta que não fecha bem, trepidação — dispara a mesma reação dezenas de vezes." />
-      </p>
-    </div>
+    <p className="wsp-grupo-titulo com-margem">Catálogo de regras</p>
+    <div className="wsp-catalogo-regras">{catalogoRegras.map((regra) => {
+      const ativa = Boolean(perfil.regras?.find((r) => r.regra === regra.id)?.habilitada);
+      return <label key={regra.id} className={`wsp-regra ${ativa ? "ativa" : ""}`}><input type="checkbox" checked={ativa} onChange={(e) => onPatchPerfil(`${regra.nome} ${e.target.checked ? "habilitada" : "desabilitada"}`, (p) => ({ ...p, regras: p.regras?.some((r) => r.regra === regra.id) ? p.regras.map((r) => r.regra === regra.id ? { ...r, habilitada: e.target.checked } : r) : [...(p.regras ?? []), { regra: regra.id, habilitada: e.target.checked }] }))} /><span><strong>{regra.nome}</strong><small>{regra.descricao}</small></span></label>;
+    })}</div>
+    <div className="wsp-bloco"><div className="wsp-bloco-head"><span>Evitar repetição da mesma violação</span><Toggle checked={perfil.latchViolacao} onChange={(next) => onPatchPerfil(`Latch ${next ? "ativado" : "desativado"}`, (p) => ({ ...p, latchViolacao: next }))} label={perfil.latchViolacao ? "Ativo" : "Desligado"} /></div><p className="wsp-ajuda menor">Uma nova reação só ocorre depois que a condição cessar ou o perfil mudar.</p></div>
   </>;
 }
 
-// --------------------------------------------------------------- Contingência
-
-export function ContingencySettings({ perfil, onPatchPerfil }: { perfil: PerfilOperacional; onPatchPerfil: (d: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void }) {
-  const armados = perfil.sensores.filter((s) => s.armado);
+function ActionSettings({ perfil, onPatchPerfil }: EditorProps) {
+  const [aberto, setAberto] = useState<Atuador | null>(null);
+  const acoes = acoesDoPerfil(perfil);
+  const patchAcoes = (descricao: string, fn: (atual: ConfiguracaoAcoes) => ConfiguracaoAcoes) => onPatchPerfil(descricao, (p) => ({ ...p, acoes: fn(acoesDoPerfil(p)) }));
+  const patchAtuador = (atuador: Atuador, descricao: string, fn: (a: ConfigAtuador) => ConfigAtuador) => onPatchPerfil(descricao, (p) => ({ ...p, atuadores: { ...p.atuadores, [atuador]: fn(p.atuadores[atuador]) } }));
   return <>
-    <p className="wsp-ajuda">
-      Em satélite ou LoRaWAN a banda é mínima e cada mensagem custa.
-      <Dica texto="Alertar por satélite cada abertura de porta consumiria o crédito antes do evento que importa — por isso é o perfil que decide o que vale a pena." />
-    </p>
+    <SectionIntro title="Ações da violação">Escolha o que o equipamento executa e como a ocorrência chega à central.</SectionIntro>
+    <p className="wsp-grupo-titulo">Atuadores acionados</p>
+    <ul className="wsp-lista">{atuadores.map((atuador) => {
+      const item = perfil.atuadores[atuador];
+      const ativo = item.acionarEmViolacao ?? (atuador === "sirene" || atuador === "luz_alerta");
+      const expandido = aberto === atuador && ativo;
+      return <li key={atuador} className={`wsp-item ${expandido ? "aberto" : ""}`}>
+        <div className="wsp-item-head estatico"><button className="wsp-item-expande" disabled={!ativo} aria-label={`Configurar ${atuadorLabel[atuador]}`} onClick={() => setAberto(expandido ? null : atuador)}>{expandido ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><span className="wsp-item-nome">{atuadorLabel[atuador]}</span><Toggle checked={ativo} onChange={(next) => patchAtuador(atuador, `${atuadorLabel[atuador]} ${next ? "incluído nas ações" : "removido das ações"}`, (a) => ({ ...a, acionarEmViolacao: next }))} label={ativo ? "Acionar" : "Não acionar"} /></div>
+        {expandido ? <div className="wsp-item-corpo"><Campo rotulo="Tipo de acionamento"><Segmentado opcoes={modos.map((m) => ({ id: m, label: acionamentoLabel[m] }))} valor={item.acionamento} onChange={(v) => patchAtuador(atuador, `${atuadorLabel[atuador]}: ${acionamentoLabel[v as ModoAcionamento]}`, (a) => ({ ...a, acionamento: v as ModoAcionamento }))} /></Campo>{item.acionamento === "temporario" ? <label className="wsp-campo-inline">Duração <input type="number" min={1} value={item.duracaoSeg} onChange={(e) => patchAtuador(atuador, `${atuadorLabel[atuador]}: ${e.target.value}s`, (a) => ({ ...a, duracaoSeg: Number(e.target.value) }))} /> segundos</label> : <p className="wsp-ajuda menor">Permanece acionado até a violação cessar e a central autorizar.</p>}</div> : null}
+      </li>;
+    })}</ul>
 
-    <Campo rotulo="Sensores que geram alerta em contingência">
-      {armados.length ? <div className="wsp-chips">{armados.map((s) => {
-        const on = perfil.contingencia.sensores.includes(s.sensor);
-        return <button key={s.sensor} className={`wsp-chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => onPatchPerfil(`${sensorLabel[s.sensor]} ${on ? "fora da" : "na"} contingência`, (p) => ({ ...p, contingencia: { ...p.contingencia, sensores: on ? p.contingencia.sensores.filter((x) => x !== s.sensor) : [...p.contingencia.sensores, s.sensor] } }))}>
-          {sensorLabel[s.sensor]}
-        </button>;
-      })}</div> : <p className="wsp-vazio">Nenhum sensor armado neste perfil — arme um na aba Sensores.</p>}
-    </Campo>
-
-    <Campo rotulo="Frequência de reporte em contingência">
-      <select value={perfil.contingencia.frequenciaReporteSeg} onChange={(e) => onPatchPerfil(`Reporte em contingência a cada ${e.target.value}s`, (p) => ({ ...p, contingencia: { ...p.contingencia, frequenciaReporteSeg: Number(e.target.value) } }))}>
-        {[30, 60, 120, 300, 900].map((seg) => <option key={seg} value={seg}>{seg < 60 ? `A cada ${seg} s (alto consumo)` : `A cada ${seg / 60} min${seg === 900 ? " (economia)" : ""}`}</option>)}
-      </select>
-    </Campo>
-
-    <Campo rotulo="O ajuste acima expira em">
-      <select value={perfil.contingencia.expiraEmHoras} onChange={(e) => onPatchPerfil(`Ajuste de contingência expira em ${e.target.value} h`, (p) => ({ ...p, contingencia: { ...p.contingencia, expiraEmHoras: Number(e.target.value) } }))}>
-        {[1, 2, 4, 6, 8, 12, 18].map((h) => <option key={h} value={h}>{h} h</option>)}
-      </select>
-      <p className="wsp-ajuda menor">Ao expirar volta ao padrão — é o que impede que uma decisão de emergência vire configuração permanente.</p>
-    </Campo>
+    <p className="wsp-grupo-titulo com-margem">Cabine e central</p>
+    <div className="wsp-acoes-grid">
+      <ActionCard icon={<BellRing size={16} />} title="Aviso na cabine" help="Exibe uma orientação ao motorista."><Toggle checked={acoes.avisoCabine} onChange={(next) => patchAcoes(`Aviso na cabine ${next ? "ativado" : "desativado"}`, (a) => ({ ...a, avisoCabine: next }))} /></ActionCard>
+      <ActionCard icon={<Volume2 size={16} />} title="Áudio na cabine" help="Reproduzido ao detectar a violação." vertical><select value={acoes.audio} onChange={(e) => patchAcoes("Áudio da cabine alterado", (a) => ({ ...a, audio: e.target.value as ConfiguracaoAcoes["audio"] }))}><option value="nenhum">Sem áudio</option><option value="alerta">Tom de alerta</option><option value="instrucao_parada">“Pare em local seguro”</option><option value="contate_central">“Contate a central”</option></select></ActionCard>
+      <ActionCard icon={<Radio size={16} />} title="Gerar evento" help="Cria ocorrência para tratamento na central."><Toggle checked={acoes.gerarEvento} onChange={(next) => patchAcoes(`Geração de evento ${next ? "ativada" : "desativada"}`, (a) => ({ ...a, gerarEvento: next }))} /></ActionCard>
+    </div>
+    <Campo rotulo="Canais de envio do evento"><div className="wsp-canais">{canais.map((canal) => { const ativo = acoes.canais.includes(canal); return <button key={canal} className={`wsp-canal ${ativo ? "ativo" : ""}`} aria-pressed={ativo} onClick={() => patchAcoes(`${canalEnvioLabel[canal]} ${ativo ? "removido" : "selecionado"}`, (a) => ({ ...a, canais: ativo ? a.canais.filter((c) => c !== canal) : [...a.canais, canal] }))}><span>{canalEnvioLabel[canal]}</span><small>{canal === "tcp" ? "Rede celular/IP" : canal === "satelite" ? "Fallback satelital" : "Baixa banda"}</small></button>; })}</div></Campo>
+    <div className="wsp-camera"><div className="wsp-camera-head"><Camera size={17} /><div><strong>Evidência de câmera</strong><small>Anexar imagem ou vídeo ao evento.</small></div><Toggle checked={acoes.camera.habilitada} onChange={(next) => patchAcoes(`Câmera ${next ? "habilitada" : "desabilitada"}`, (a) => ({ ...a, camera: { ...a.camera, habilitada: next } }))} /></div>{acoes.camera.habilitada ? <div className="wsp-camera-opcoes"><Segmentado opcoes={[{ id: "snapshot", label: "Snapshot" }, { id: "gravacao", label: "Gravar vídeo" }]} valor={acoes.camera.modo} onChange={(modo) => patchAcoes(`Evidência: ${modo}`, (a) => ({ ...a, camera: { ...a.camera, modo: modo as "snapshot" | "gravacao" } }))} />{acoes.camera.modo === "gravacao" ? <label className="wsp-campo-inline">Gravar <input type="number" min={5} max={300} value={acoes.camera.duracaoSeg} onChange={(e) => patchAcoes(`Gravação de ${e.target.value}s`, (a) => ({ ...a, camera: { ...a.camera, duracaoSeg: Number(e.target.value) } }))} /> segundos</label> : <p className="wsp-ajuda menor">Captura uma imagem no instante da violação.</p>}</div> : null}</div>
   </>;
 }
 
-// ------------------------------------------------------------------ Primitivos
-
-function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
-  return <div className="wsp-campo"><span className="wsp-campo-rotulo">{rotulo}</span>{children}</div>;
+function ContingencySettings({ perfil, onPatchPerfil }: EditorProps) {
+  const armados = perfil.sensores.filter((s) => s.armado);
+  const ativos = perfil.contingencia.canais ?? ["satelite", "lora"];
+  const repetir = perfil.contingencia.repetirEnquantoViolacao ?? true;
+  return <>
+    <SectionIntro title="Contingência de comunicação">Defina o comportamento quando Satélite ou LoRa assumirem o envio.</SectionIntro>
+    <Campo rotulo="Canais habilitados na contingência"><div className="wsp-canais">{(["satelite", "lora"] as const).map((canal) => { const ativo = ativos.includes(canal); return <button key={canal} className={`wsp-canal ${ativo ? "ativo" : ""}`} aria-pressed={ativo} onClick={() => onPatchPerfil(`${canalEnvioLabel[canal]} ${ativo ? "desabilitado" : "habilitado"}`, (p) => ({ ...p, contingencia: { ...p.contingencia, canais: ativo ? ativos.filter((c) => c !== canal) : [...ativos, canal] } }))}><span>{canalEnvioLabel[canal]}</span><small>{canal === "satelite" ? "Cobertura ampla" : "Rede LoRa disponível"}</small></button>; })}</div></Campo>
+    <Campo rotulo="Violações que merecem contingência">{armados.length ? <div className="wsp-chips">{armados.map((s) => { const on = perfil.contingencia.sensores.includes(s.sensor); return <button key={s.sensor} className={`wsp-chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => onPatchPerfil(`${sensorLabel[s.sensor]} ${on ? "fora da" : "na"} contingência`, (p) => ({ ...p, contingencia: { ...p.contingencia, sensores: on ? p.contingencia.sensores.filter((x) => x !== s.sensor) : [...p.contingencia.sensores, s.sensor] } }))}>{sensorLabel[s.sensor]}</button>; })}</div> : <p className="wsp-vazio">Nenhum sensor armado. Configure a aba Sensores e regras.</p>}</Campo>
+    <div className="wsp-bloco"><div className="wsp-bloco-head"><span>Enquanto permanecer em violação</span><Toggle checked={repetir} onChange={(next) => onPatchPerfil(`Repetição de contingência ${next ? "ativada" : "desativada"}`, (p) => ({ ...p, contingencia: { ...p.contingencia, repetirEnquantoViolacao: next } }))} label={repetir ? "Repetir mensagens" : "Enviar uma vez"} /></div>{repetir ? <Campo rotulo="Gerar nova mensagem a cada"><select value={perfil.contingencia.frequenciaReporteSeg} onChange={(e) => onPatchPerfil(`Reporte em contingência a cada ${e.target.value}s`, (p) => ({ ...p, contingencia: { ...p.contingencia, frequenciaReporteSeg: Number(e.target.value) } }))}>{[30, 60, 120, 300, 900].map((seg) => <option key={seg} value={seg}>{seg < 60 ? `${seg} segundos` : `${seg / 60} minuto${seg > 60 ? "s" : ""}`}</option>)}</select></Campo> : null}</div>
+    <Campo rotulo="A configuração temporária expira em"><select value={perfil.contingencia.expiraEmHoras} onChange={(e) => onPatchPerfil(`Contingência expira em ${e.target.value} h`, (p) => ({ ...p, contingencia: { ...p.contingencia, expiraEmHoras: Number(e.target.value) } }))}>{[1, 2, 4, 6, 8, 12, 18].map((h) => <option key={h} value={h}>{h} h</option>)}</select></Campo>
+  </>;
 }
 
-function Segmentado({ opcoes, valor, onChange }: { opcoes: { id: string; label: string }[]; valor: string; onChange: (v: string) => void }) {
-  return <div className="wsp-segmentado" role="radiogroup">
-    {opcoes.map((o) => <button key={o.id} role="radio" aria-checked={valor === o.id} className={valor === o.id ? "ativo" : ""} onClick={() => onChange(o.id)}>{o.label}</button>)}
-  </div>;
-}
-
-function Dica({ texto }: { texto: string }) {
-  const [aberto, setAberto] = useState(false);
-  return <span className="wsp-dica">
-    <button aria-label="Saiba mais" aria-expanded={aberto} onClick={() => setAberto(!aberto)}><HelpCircle size={13} /></button>
-    {aberto ? <span className="wsp-dica-balao" role="note">{texto}</span> : null}
-  </span>;
-}
+function SectionIntro({ title, children }: { title: string; children: React.ReactNode }) { return <div className="wsp-secao-topo"><p className="wsp-secao-kicker">{title}</p><p className="wsp-ajuda">{children}</p></div>; }
+function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) { return <div className="wsp-campo"><span className="wsp-campo-rotulo">{rotulo}</span>{children}</div>; }
+function Segmentado({ opcoes, valor, onChange }: { opcoes: { id: string; label: string }[]; valor: string; onChange: (v: string) => void }) { return <div className="wsp-segmentado" role="radiogroup">{opcoes.map((o) => <button key={o.id} role="radio" aria-checked={valor === o.id} className={valor === o.id ? "ativo" : ""} onClick={() => onChange(o.id)}>{o.label}</button>)}</div>; }
+function ActionCard({ icon, title, help, children, vertical = false }: { icon: React.ReactNode; title: string; help: string; children: React.ReactNode; vertical?: boolean }) { return <div className={`wsp-acao-card ${vertical ? "vertical" : ""}`}><div className="wsp-acao-card-head">{icon}<div><strong>{title}</strong><small>{help}</small></div></div>{children}</div>; }

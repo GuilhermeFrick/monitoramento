@@ -88,6 +88,40 @@ export const estadosSensorKeys = Object.keys(estadosSensor) as Sensor[];
 
 export type SensorArmado = { sensor: Sensor; armado: boolean; estadoViolacao: string };
 
+export type RegraCatalogoId = "panico" | "desvio_rota" | "parada_nao_programada" | "perda_sinal" | "tempo_parado";
+export type RegraPerfil = { regra: RegraCatalogoId; habilitada: boolean };
+
+export const catalogoRegras: { id: RegraCatalogoId; nome: string; descricao: string }[] = [
+  { id: "panico", nome: "Botão de pânico", descricao: "Considera violação quando o botão de emergência é acionado." },
+  { id: "desvio_rota", nome: "Desvio de rota", descricao: "Detecta saída do corredor previsto no rotograma ativo." },
+  { id: "parada_nao_programada", nome: "Parada não programada", descricao: "Detecta imobilização fora dos pontos e janelas permitidos." },
+  { id: "perda_sinal", nome: "Perda de sinal", descricao: "Viola quando o equipamento fica sem comunicação além da tolerância." },
+  { id: "tempo_parado", nome: "Tempo parado excedido", descricao: "Detecta permanência acima do tempo permitido para a operação." },
+];
+
+export type CanalEnvio = "tcp" | "satelite" | "lora";
+export const canalEnvioLabel: Record<CanalEnvio, string> = {
+  tcp: "Primário · TCP",
+  satelite: "Secundário · Satélite",
+  lora: "Terciário · LoRa",
+};
+
+export type ConfiguracaoAcoes = {
+  avisoCabine: boolean;
+  audio: "nenhum" | "alerta" | "instrucao_parada" | "contate_central";
+  gerarEvento: boolean;
+  canais: CanalEnvio[];
+  camera: { habilitada: boolean; modo: "snapshot" | "gravacao"; duracaoSeg: number };
+};
+
+export const acoesPadrao = (): ConfiguracaoAcoes => ({
+  avisoCabine: true,
+  audio: "alerta",
+  gerarEvento: true,
+  canais: ["tcp"],
+  camera: { habilitada: false, modo: "snapshot", duracaoSeg: 30 },
+});
+
 /**
  * Configuração de um atuador dentro de um perfil.
  *
@@ -98,6 +132,8 @@ export type SensorArmado = { sensor: Sensor; armado: boolean; estadoViolacao: st
  */
 export type ConfigAtuador = {
   postura: PosturaAtuador;
+  /** Se uma violação deste perfil deve acionar o atuador. */
+  acionarEmViolacao?: boolean;
   acionamento: ModoAcionamento;
   duracaoSeg: number;
   /** Se a central pode habilitar um botão na cabine para o motorista acionar (`DEV-45`). */
@@ -113,12 +149,20 @@ export type PerfilOperacional = {
   nome: string;
   atuadores: Record<Atuador, ConfigAtuador>;
   sensores: SensorArmado[];
+  /** Regras adicionais escolhidas no catálogo da plataforma. */
+  regras?: RegraPerfil[];
+  /** Entregas e reações executadas quando uma violação ocorre. */
+  acoes?: ConfiguracaoAcoes;
   /** Após reagir a uma violação, não reage de novo até o perfil trocar (`DEV-66`). */
   latchViolacao: boolean;
   contingencia: {
+    /** Canais de baixa banda que podem assumir quando o TCP estiver indisponível. */
+    canais?: Array<"satelite" | "lora">;
     /** Quais sensores geram alerta quando o equipamento está em canal de contingência (`DEV-78`). */
     sensores: Sensor[];
     frequenciaReporteSeg: number;
+    /** Mantém o reporte periódico enquanto a violação continuar ativa. */
+    repetirEnquantoViolacao?: boolean;
     /** O ajuste acima expira e volta ao padrão (`DEV-79`). */
     expiraEmHoras: number;
   };
@@ -136,11 +180,53 @@ export type TipoMacro = "inicio" | "operacao" | "fim";
  * perfil operacional** no equipamento (`DEV-64`), e carrega sua posição no grafo
  * para a edição gráfica da sequência.
  */
+/**
+ * As duas funções que uma macro pode carregar.
+ *
+ * No sistema de referência (New Enterprise, manual p. 684-686) o motorista
+ * **nunca inicia uma jornada ou uma viagem diretamente**: ele registra uma
+ * macro, e a macro carrega até duas funções independentes que avançam duas
+ * máquinas de estado distintas. `FIM DE VIAGEM` é ao mesmo tempo *Finalizar
+ * Viagem* (logística) e *Início de Interjornada* (jornada); `REINICIO DE
+ * VIAGEM` só avança a jornada, e deliberadamente **não** reabre a viagem.
+ *
+ * Só existe "Início de": o fim de um estado é a macro seguinte. A duração sai
+ * da diferença entre marcos consecutivos (manual p. 172, "Tempo Entre Macros"),
+ * que é a mesma distinção **marco × condição** do `DEV-62.1`.
+ */
+export type FuncaoJornada = "inicio_jornada" | "inicio_direcao" | "inicio_espera" | "inicio_refeicao" | "inicio_descanso" | "inicio_interjornada" | "inicio_descanso_semanal";
+export type FuncaoLogistica = "iniciar_viagem" | "finalizar_viagem" | "iniciar_operacao" | "concluir_operacao" | "cancelar_operacao";
+
+export const funcaoJornadaLabel: Record<FuncaoJornada, string> = {
+  inicio_jornada: "Início de jornada",
+  inicio_direcao: "Início de direção",
+  inicio_espera: "Início de espera",
+  inicio_refeicao: "Início de refeição",
+  inicio_descanso: "Início de descanso",
+  inicio_interjornada: "Início de interjornada",
+  inicio_descanso_semanal: "Início de descanso semanal",
+};
+
+export const funcaoLogisticaLabel: Record<FuncaoLogistica, string> = {
+  iniciar_viagem: "Iniciar viagem",
+  finalizar_viagem: "Finalizar viagem",
+  iniciar_operacao: "Iniciar operação",
+  concluir_operacao: "Concluir operação",
+  cancelar_operacao: "Cancelar operação",
+};
+
+export const funcoesJornada = Object.keys(funcaoJornadaLabel) as FuncaoJornada[];
+export const funcoesLogistica = Object.keys(funcaoLogisticaLabel) as FuncaoLogistica[];
+
 export type MacroVeiculo = {
   id: string;
   nome: string;
   descricao: string;
   tipo: TipoMacro;
+  /** Avança a máquina de jornada (controle de ponto). `null` = não mexe nela. */
+  funcaoJornada: FuncaoJornada | null;
+  /** Avança a máquina de logística (viagem/operação). `null` = não mexe nela. */
+  funcaoLogistica: FuncaoLogistica | null;
   perfil: PerfilOperacional;
   x: number;
   y: number;
@@ -235,6 +321,31 @@ export function validarConfiguracao(c: ConfiguracaoVeiculo): Validacao[] {
       }
     }
   }
+  // Coerência das duas máquinas que as macros movem — o grafo sozinho não pega
+  // isto, porque uma transição pode ser legítima e ainda assim deixar a viagem
+  // ou a jornada num estado impossível.
+  if (!c.macros.some((m) => m.funcaoJornada === "inicio_jornada")) {
+    achados.push({ nivel: "aviso", codigo: "sem-abertura-jornada", mensagem: "Nenhuma macro abre a jornada (“Início de jornada”) — o controle de ponto não teria marco inicial." });
+  }
+  for (const m of c.macros) {
+    if (m.funcaoLogistica && ["concluir_operacao", "cancelar_operacao"].includes(m.funcaoLogistica)) {
+      const alcancaAbertura = c.transicoes.some((t) => t.para === m.id && c.macros.find((x) => x.id === t.de)?.funcaoLogistica === "iniciar_operacao");
+      if (!alcancaAbertura) {
+        achados.push({ nivel: "aviso", codigo: "operacao-sem-abertura", macroId: m.id, mensagem: `“${m.nome}” ${m.funcaoLogistica === "concluir_operacao" ? "conclui" : "cancela"} uma operação, mas nenhuma macro que a antecede no grafo abre operação.` });
+      }
+    }
+    if (m.funcaoLogistica === "finalizar_viagem") {
+      const alcancaInicio = c.transicoes.some((t) => t.para === m.id && c.macros.find((x) => x.id === t.de)?.funcaoLogistica === "iniciar_viagem");
+      const temInicio = c.macros.some((x) => x.funcaoLogistica === "iniciar_viagem");
+      if (temInicio && !alcancaInicio && !c.transicoes.some((t) => t.para === m.id)) {
+        achados.push({ nivel: "aviso", codigo: "fim-viagem-inalcancavel", macroId: m.id, mensagem: `“${m.nome}” finaliza a viagem mas não é alcançável a partir de nenhuma macro.` });
+      }
+    }
+    if (!m.funcaoJornada && !m.funcaoLogistica && m.tipo !== "operacao") {
+      achados.push({ nivel: "aviso", codigo: "macro-sem-funcao", macroId: m.id, mensagem: `“${m.nome}” está marcada como ${m.tipo === "inicio" ? "início" : "fim"} de sequência mas não move jornada nem logística.` });
+    }
+  }
+
   if (!c.perfilPadrao.sensores.some((s) => s.armado)) {
     achados.push({ nivel: "aviso", codigo: "padrao-sem-sensor", mensagem: "O perfil padrão não tem sensor armado — entre um embarque e outro o veículo fica sem detecção." });
   }
@@ -272,6 +383,7 @@ function macrosBase(): MacroVeiculo[] {
   return [
     {
       id: "MC-INICIO", nome: "Início de viagem", tipo: "inicio", x: 60, y: 40,
+      funcaoLogistica: "iniciar_viagem", funcaoJornada: "inicio_direcao",
       descricao: "Motorista assume o veículo e inicia a viagem.",
       perfil: {
         nome: "Em viagem",
@@ -295,6 +407,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-CLIENTE-IN", nome: "Chegada no cliente", tipo: "operacao", x: 300, y: 40,
+      funcaoLogistica: "iniciar_operacao", funcaoJornada: "inicio_espera",
       descricao: "Veículo entrou no cliente e começa a descarga.",
       perfil: {
         nome: "No cliente",
@@ -318,6 +431,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-CLIENTE-OUT", nome: "Saída do cliente", tipo: "operacao", x: 540, y: 40,
+      funcaoLogistica: "concluir_operacao", funcaoJornada: "inicio_direcao",
       descricao: "Entrega concluída; veículo retoma a viagem.",
       perfil: {
         nome: "Em viagem",
@@ -340,6 +454,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-ABASTECIMENTO", nome: "Parada para abastecimento", tipo: "operacao", x: 180, y: 200,
+      funcaoLogistica: null, funcaoJornada: "inicio_descanso",
       descricao: "Parada em posto homologado para abastecer.",
       perfil: {
         nome: "Abastecimento",
@@ -361,6 +476,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-REFEICAO", nome: "Pausa para refeição", tipo: "operacao", x: 420, y: 200,
+      funcaoLogistica: null, funcaoJornada: "inicio_refeicao",
       descricao: "Pausa de refeição prevista na jornada.",
       perfil: {
         nome: "Pausa",
@@ -383,6 +499,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-PERNOITE", nome: "Pernoite", tipo: "operacao", x: 660, y: 200,
+      funcaoLogistica: null, funcaoJornada: "inicio_interjornada",
       descricao: "Veículo estacionado para pernoite autorizado.",
       perfil: {
         nome: "Pernoite",
@@ -406,6 +523,7 @@ function macrosBase(): MacroVeiculo[] {
     },
     {
       id: "MC-FIM", nome: "Fim de viagem", tipo: "fim", x: 780, y: 40,
+      funcaoLogistica: "finalizar_viagem", funcaoJornada: "inicio_interjornada",
       descricao: "Viagem encerrada; veículo entregue no pátio.",
       perfil: {
         nome: "Pátio",

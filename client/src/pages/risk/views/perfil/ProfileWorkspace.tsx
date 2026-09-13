@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, PanelRightClose, PanelRightOpen, RotateCcw, Truck, Undo2, Upload, X } from "lucide-react";
-import { Callout, Modal, formatDateTime, useStoredState } from "../../shared";
+import { Copy, PanelRightClose, PanelRightOpen, RotateCcw, Undo2, Upload, X } from "lucide-react";
+import { Callout, Modal, useStoredState } from "../../shared";
 import {
-  configuracoesIniciais, itensDoEmbarque, newId, perfilVigente, statusConfig, statusSyncLabel, validarConfiguracao, STORAGE,
-  type ConfiguracaoVeiculo, type MacroVeiculo, type PerfilOperacional, type ResultadoEmbarque, type TipoMacro,
+  configuracoesIniciais, funcaoJornadaLabel, funcaoLogisticaLabel, funcoesJornada, funcoesLogistica, itensDoEmbarque, newId, statusConfig, statusSyncLabel, validarConfiguracao, STORAGE,
+  type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type PerfilOperacional, type ResultadoEmbarque, type TipoMacro,
 } from "../../domain";
-import { MacroGraphCanvas, autoLayout, type SelecaoGrafo } from "./MacroGraphCanvas";
+import { MacroGraphCanvas, autoLayout, type MacroCatalogo, type SelecaoGrafo } from "./MacroGraphCanvas";
 import { ProfileInspector, type AbaInspetor } from "./ProfileInspector";
 import { DeployReviewDialog, type FaseEmbarque } from "./DeployDialogs";
 
@@ -13,18 +13,20 @@ const OPERADOR = "Larissa Martins";
 
 export function useConfiguracoes() { return useStoredState<ConfiguracaoVeiculo[]>(STORAGE.configuracoes, configuracoesIniciais); }
 
-export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, onToast, VehicleNavigator }: {
+export function ProfileWorkspace({ configs, setConfigs, busca, onBusca, onLimparBusca, onToast, VehicleNavigator }: {
   configs: ConfiguracaoVeiculo[];
   setConfigs: (next: ConfiguracaoVeiculo[] | ((c: ConfiguracaoVeiculo[]) => ConfiguracaoVeiculo[])) => void;
   busca: string;
+  onBusca: (valor: string) => void;
   onLimparBusca: () => void;
   onToast: (m: string) => void;
-  VehicleNavigator: React.ComponentType<{ configs: ConfiguracaoVeiculo[]; selecionado: string; busca: string; onLimparBusca: () => void; onSelecionar: (v: string) => void }>;
+  VehicleNavigator: React.ComponentType<{ configs: ConfiguracaoVeiculo[]; selecionado: string; busca: string; onBusca: (valor: string) => void; onLimparBusca: () => void; onSelecionar: (v: string) => void; recolhido?: boolean; onAlternar?: () => void }>;
 }) {
   const [veiculo, setVeiculo] = useState(configs[0]?.veiculo ?? "");
   const [selecao, setSelecao] = useState<SelecaoGrafo>({ tipo: "padrao" });
-  const [aba, setAba] = useState<AbaInspetor>("atuadores");
-  const [inspetorAberto, setInspetorAberto] = useState(true);
+  const [aba, setAba] = useState<AbaInspetor>("estado");
+  const [navegadorRecolhido, setNavegadorRecolhido] = useState(false);
+  const [inspetorAberto, setInspetorAberto] = useState(false);
   const [novaMacro, setNovaMacro] = useState(false);
   const [confirmacao, setConfirmacao] = useState<{ titulo: string; corpo: string; acao: () => void } | null>(null);
   const [desfazer, setDesfazer] = useState<{ texto: string; snapshot: ConfiguracaoVeiculo } | null>(null);
@@ -34,8 +36,6 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
   const config = configs.find((c) => c.veiculo === veiculo) ?? configs[0];
   const validacoes = useMemo(() => validarConfiguracao(config), [config]);
   const erros = validacoes.filter((v) => v.nivel === "erro");
-  const status = statusConfig(config);
-  const vigente = perfilVigente(config);
 
   useEffect(() => { if (!desfazer) return; const t = window.setTimeout(() => setDesfazer(null), 9000); return () => window.clearTimeout(t); }, [desfazer]);
 
@@ -51,6 +51,11 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
   const patchPerfil = (descricao: string, fn: (p: PerfilOperacional) => PerfilOperacional) => alterar(descricao, (c) => selecao.tipo === "macro"
     ? { ...c, macros: c.macros.map((m) => m.id === selecao.id ? { ...m, perfil: fn(m.perfil) } : m) }
     : { ...c, perfilPadrao: fn(c.perfilPadrao) });
+
+  const patchMacro = (descricao: string, fn: (m: MacroVeiculo) => MacroVeiculo) => {
+    if (selecao.tipo !== "macro") return;
+    alterar(descricao, (c) => ({ ...c, macros: c.macros.map((m) => m.id === selecao.id ? fn(m) : m) }));
+  };
 
   const snapshot = () => ({ ...config, macros: config.macros.map((m) => ({ ...m })), transicoes: config.transicoes.map((t) => ({ ...t })) });
 
@@ -110,36 +115,40 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
     }, 1100);
   };
 
-  const criarMacro = (nome: string, descricao: string, tipo: TipoMacro) => {
+  const inserirMacro = (nome: string, descricao: string, tipo: TipoMacro, funcaoJornada: FuncaoJornada | null, funcaoLogistica: FuncaoLogistica | null) => {
     const id = newId("MC");
-    alterar(`Macro “${nome}” criada`, (c) => ({ ...c, macros: [...c.macros, { id, nome, descricao, tipo, x: 40, y: 40 + c.macros.length * 20, perfil: { ...c.perfilPadrao, nome } }] }));
+    alterar(`Macro “${nome}” adicionada`, (c) => {
+      const direita = c.macros.length ? Math.max(...c.macros.map((m) => m.x)) + 220 : 40;
+      const topo = c.macros.length ? Math.min(...c.macros.map((m) => m.y)) + (c.macros.length % 4) * 92 : 40;
+      return { ...c, macros: [...c.macros, { id, nome, descricao, tipo, funcaoJornada, funcaoLogistica, x: direita, y: topo, perfil: { ...c.perfilPadrao, nome } }] };
+    });
     setSelecao({ tipo: "macro", id });
+    setInspetorAberto(false);
+  };
+
+  const criarMacro = (nome: string, descricao: string, tipo: TipoMacro, funcaoJornada: FuncaoJornada | null, funcaoLogistica: FuncaoLogistica | null) => {
+    inserirMacro(nome, descricao, tipo, funcaoJornada, funcaoLogistica);
     setNovaMacro(false);
     onToast(`Macro “${nome}” criada. Ligue-a no grafo para o motorista poder registrá-la.`);
   };
 
+  const adicionarMacroCatalogo = (macro: MacroCatalogo) => {
+    if (config.macros.some((m) => m.nome.trim().toLocaleLowerCase("pt-BR") === macro.nome.toLocaleLowerCase("pt-BR"))) {
+      onToast(`A macro “${macro.nome}” já está neste grafo.`);
+      return;
+    }
+    inserirMacro(macro.nome, macro.descricao, macro.tipo, macro.funcaoJornada, macro.funcaoLogistica);
+    onToast(`“${macro.nome}” adicionada. Arraste um ponto azul para conectá-la ao fluxo.`);
+  };
+
   return <div className="wsp">
-    <header className="wsp-header">
-      <div className="wsp-header-id">
-        <Truck size={16} />
-        <div>
-          <h1>{config.veiculo}</h1>
-          <p>{config.frota} · agora em <strong>{vigente.perfil.nome}</strong>{vigente.macro ? ` por ${vigente.macro.nome}` : " (perfil padrão)"}</p>
-        </div>
-      </div>
+    <div className={`wsp-corpo ${inspetorAberto ? "" : "sem-inspetor"} ${navegadorRecolhido ? "nav-recolhida" : ""}`}>
+      <VehicleNavigator configs={configs} selecionado={config.veiculo} busca={busca} onBusca={onBusca} onLimparBusca={onLimparBusca} recolhido={navegadorRecolhido} onAlternar={() => setNavegadorRecolhido((atual) => !atual)} onSelecionar={(v) => { setVeiculo(v); setSelecao({ tipo: "padrao" }); setInspetorAberto(false); }} />
 
-      <div className="wsp-header-estado">
-        <span className={`wsp-status wsp-status-${status}`}>{statusSyncLabel[status]}</span>
-        <span className="wsp-header-meta">
-          {config.mudancas.length ? `${config.mudancas.length} alteração(ões) de ${config.mudancas[config.mudancas.length - 1].por}` : "sem alterações pendentes"}
-          {" · "}
-          {config.versaoEmbarcada !== null ? `v${config.versaoEmbarcada} no equipamento` : "nunca embarcado"}
-          {config.sincronizadoEm ? ` · ${formatDateTime(config.sincronizadoEm)}` : ""}
-        </span>
-      </div>
-
-      <div className="wsp-header-acoes">
-        <CopiarConfig config={config} configs={configs} onCopiar={(destinos) => {
+      <MacroGraphCanvas
+        config={config} selecao={selecao} validacoes={validacoes}
+        contextActions={<div className="wsp-contexto-acoes">
+          <CopiarConfig compact config={config} configs={configs} onCopiar={(destinos) => {
           setConfigs((atual) => atual.map((c) => !destinos.includes(c.veiculo) ? c : {
             ...c,
             macros: config.macros.map((m) => ({ ...m })), transicoes: config.transicoes.map((t) => ({ ...t })), perfilPadrao: { ...config.perfilPadrao },
@@ -148,24 +157,19 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
           onToast(`Copiado para ${destinos.length} veículo(s) — cada um precisa de novo embarque.`);
         }} />
         <button
-          className="wsp-btn primario" onClick={() => { setResultado(null); setFase("revisao"); }}
+          className="wsp-icone wsp-icone-primario" onClick={() => { setResultado(null); setFase("revisao"); }}
           disabled={!config.mudancas.length}
+          aria-label="Revisar e embarcar"
           title={!config.mudancas.length ? "Nada a embarcar: não há alterações pendentes" : erros.length ? `${erros.length} problema(s) a corrigir` : "Revisar e embarcar"}
         >
-          <Upload size={14} /> Revisar e embarcar
+          <Upload size={14} />
         </button>
-        <button className="wsp-icone so-desktop" onClick={() => setInspetorAberto(!inspetorAberto)} aria-label={inspetorAberto ? "Fechar inspetor" : "Abrir inspetor"} aria-pressed={inspetorAberto}>
+        <button className="wsp-icone" onClick={() => setInspetorAberto(!inspetorAberto)} aria-label={inspetorAberto ? "Fechar editor" : "Abrir editor"} title={inspetorAberto ? "Fechar editor" : "Abrir editor"} aria-pressed={inspetorAberto}>
           {inspetorAberto ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
         </button>
-      </div>
-    </header>
-
-    <div className={`wsp-corpo ${inspetorAberto ? "" : "sem-inspetor"}`}>
-      <VehicleNavigator configs={configs} selecionado={config.veiculo} busca={busca} onLimparBusca={onLimparBusca} onSelecionar={(v) => { setVeiculo(v); setSelecao({ tipo: "padrao" }); }} />
-
-      <MacroGraphCanvas
-        config={config} selecao={selecao} validacoes={validacoes}
-        onSelecionar={(s) => { setSelecao(s); setInspetorAberto(true); }}
+        </div>}
+        onSelecionar={(s) => { setSelecao(s); setInspetorAberto(false); }}
+        onAbrirEditor={(s) => { setSelecao(s); setInspetorAberto(true); }}
         onMoverMacro={(id, x, y) => reposicionar((c) => ({ ...c, macros: c.macros.map((m) => m.id === id ? { ...m, x, y } : m) }))}
         onCriarTransicao={(de, para) => {
           const nomeDe = config.macros.find((m) => m.id === de)?.nome ?? de;
@@ -173,6 +177,7 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
           alterar(`Transição ${nomeDe} → ${nomePara} criada`, (c) => ({ ...c, transicoes: [...c.transicoes, { de, para }] }));
           onToast(`Transição criada: ${nomeDe} → ${nomePara}.`);
         }}
+        onAdicionarMacro={adicionarMacroCatalogo}
         onNovaMacro={() => setNovaMacro(true)}
         onAutoLayout={() => { reposicionar((c) => ({ ...c, macros: autoLayout(c) })); onToast("Grafo reorganizado em camadas."); }}
         onToast={onToast}
@@ -182,7 +187,7 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
         <button className="wsp-inspetor-fundo" aria-label="Fechar inspetor" onClick={() => setInspetorAberto(false)} />
         <ProfileInspector
           config={config} selecao={selecao} aba={aba} validacoes={validacoes}
-          onAba={setAba} onPatchPerfil={patchPerfil} onRemoverMacro={removerMacro} onRemoverTransicao={removerTransicao}
+          onAba={setAba} onFechar={() => setInspetorAberto(false)} onPatchPerfil={patchPerfil} onPatchMacro={patchMacro} onRemoverMacro={removerMacro} onRemoverTransicao={removerTransicao}
         />
       </> : null}
     </div>
@@ -212,13 +217,29 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onLimparBusca, on
   </div>;
 }
 
-function NovaMacroModal({ onClose, onCriar }: { onClose: () => void; onCriar: (nome: string, descricao: string, tipo: TipoMacro) => void }) {
+function NovaMacroModal({ onClose, onCriar }: { onClose: () => void; onCriar: (nome: string, descricao: string, tipo: TipoMacro, fj: FuncaoJornada | null, fl: FuncaoLogistica | null) => void }) {
   const [nome, setNome] = useState("Parada para inspeção");
   const [descricao, setDescricao] = useState("Parada não prevista para verificação do veículo.");
   const [tipo, setTipo] = useState<TipoMacro>("operacao");
-  return <Modal title="Nova macro" description="Um comportamento que o motorista pode informar — e o perfil que ele ativa neste veículo." onClose={onClose}>
+  const [fj, setFj] = useState<FuncaoJornada | "">("inicio_espera");
+  const [fl, setFl] = useState<FuncaoLogistica | "">("");
+  return <Modal title="Nova macro" description="O que o motorista informa, o que isso move na jornada e na logística, e o perfil que passa a valer." onClose={onClose}>
     <div className="form-field"><label>Nome</label><input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
     <div className="form-field"><label>Descrição</label><input value={descricao} onChange={(e) => setDescricao(e.target.value)} /></div>
+    <div className="form-row">
+      <div className="form-field"><label>Função de jornada</label>
+        <select value={fj} onChange={(e) => setFj(e.target.value as FuncaoJornada | "")}>
+          <option value="">Não altera a jornada</option>
+          {funcoesJornada.map((f) => <option key={f} value={f}>{funcaoJornadaLabel[f]}</option>)}
+        </select>
+      </div>
+      <div className="form-field"><label>Função de logística</label>
+        <select value={fl} onChange={(e) => setFl(e.target.value as FuncaoLogistica | "")}>
+          <option value="">Não altera a viagem</option>
+          {funcoesLogistica.map((f) => <option key={f} value={f}>{funcaoLogisticaLabel[f]}</option>)}
+        </select>
+      </div>
+    </div>
     <div className="form-field"><label>Papel na sequência</label>
       <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoMacro)}>
         <option value="inicio">Início — abre a sequência</option>
@@ -226,17 +247,17 @@ function NovaMacroModal({ onClose, onCriar }: { onClose: () => void; onCriar: (n
         <option value="fim">Fim — encerra a sequência</option>
       </select>
     </div>
-    <p className="wsp-ajuda menor">O perfil começa como cópia do padrão do veículo. Enquanto ela não estiver ligada no grafo, o embarque fica bloqueado.</p>
-    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" disabled={!nome.trim()} onClick={() => onCriar(nome.trim(), descricao.trim(), tipo)}>Criar macro</button></div>
+    <p className="wsp-ajuda menor">Uma macro pode mover as duas máquinas ao mesmo tempo, uma só, ou nenhuma — só trocar o perfil. O fim de cada estado é a macro seguinte.</p>
+    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" disabled={!nome.trim()} onClick={() => onCriar(nome.trim(), descricao.trim(), tipo, fj || null, fl || null)}>Criar macro</button></div>
   </Modal>;
 }
 
-function CopiarConfig({ config, configs, onCopiar }: { config: ConfiguracaoVeiculo; configs: ConfiguracaoVeiculo[]; onCopiar: (destinos: string[]) => void }) {
+function CopiarConfig({ config, configs, onCopiar, compact = false }: { config: ConfiguracaoVeiculo; configs: ConfiguracaoVeiculo[]; onCopiar: (destinos: string[]) => void; compact?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const [destinos, setDestinos] = useState<string[]>([]);
   const outros = configs.filter((c) => c.veiculo !== config.veiculo);
   return <>
-    <button className="wsp-btn" onClick={() => { setDestinos([]); setAberto(true); }}><Copy size={14} /> Copiar</button>
+    <button className={compact ? "wsp-icone" : "wsp-btn"} aria-label={compact ? "Copiar configuração" : undefined} title={compact ? "Copiar configuração" : undefined} onClick={() => { setDestinos([]); setAberto(true); }}><Copy size={14} />{compact ? null : " Copiar"}</button>
     {aberto ? <Modal title={`Copiar a configuração de ${config.veiculo}`} description="Macros, sequência e perfis vão junto. O destino fica com alterações pendentes de embarque." onClose={() => setAberto(false)}>
       <Callout tone="warn" title="Isto substitui a configuração do destino">Veículos com equipamento ou carga diferentes costumam precisar de posturas diferentes — confira antes de embarcar.</Callout>
       <div className="check-list" style={{ marginTop: 12 }}>{outros.map((c) => {

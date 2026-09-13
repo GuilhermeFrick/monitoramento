@@ -1,15 +1,19 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Search, Truck, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, Truck, X } from "lucide-react";
 import { perfilVigente, statusConfig, statusSyncLabel, type ConfiguracaoVeiculo } from "../../domain";
 
-export function VehicleNavigator({ configs, selecionado, busca, onLimparBusca, onSelecionar }: {
+export function VehicleNavigator({ configs, selecionado, busca, onBusca, onLimparBusca, onSelecionar, recolhido = false, onAlternar }: {
   configs: ConfiguracaoVeiculo[];
   selecionado: string;
   busca: string;
+  onBusca: (valor: string) => void;
   onLimparBusca: () => void;
   onSelecionar: (veiculo: string) => void;
+  recolhido?: boolean;
+  onAlternar?: () => void;
 }) {
   const [recolhidas, setRecolhidas] = useState<string[]>([]);
+  const [buscaAberta, setBuscaAberta] = useState(false);
 
   const frotas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -21,14 +25,15 @@ export function VehicleNavigator({ configs, selecionado, busca, onLimparBusca, o
 
   const total = frotas.reduce((soma, [, v]) => soma + v.length, 0);
 
+  if (recolhido) return <section className="wsp-nav wsp-nav-recolhida" aria-label="Veículos recolhidos">
+    <button className="wsp-nav-toggle" onClick={onAlternar} aria-label="Expandir veículos" title="Expandir veículos"><ChevronRight size={16} /></button>
+    <div className="wsp-nav-atalhos">{configs.map((c) => <button key={c.veiculo} className={c.veiculo === selecionado ? "ativo" : ""} onClick={() => onSelecionar(c.veiculo)} aria-label={`${c.veiculo} · ${c.frota}`} title={`${c.veiculo} · ${c.frota}`}><Truck size={16} /><span className={`wsp-mini-status wsp-mini-${statusConfig(c)}`} /></button>)}</div>
+  </section>;
+
   return <section className="wsp-nav" aria-label="Veículos">
     <header className="wsp-nav-head">
-      <div className="wsp-nav-titulo">Veículos<span>{total}</span></div>
-      {busca.trim()
-        ? <button className="wsp-filtro-chip" onClick={onLimparBusca}>
-            <Search size={12} /> “{busca.trim()}” <X size={12} />
-          </button>
-        : <p className="wsp-nav-dica">Use a busca do topo para filtrar por veículo ou frota.</p>}
+      <div className="wsp-nav-titulo">Veículos<span>{total}</span><button className="wsp-nav-search" onClick={() => setBuscaAberta((aberta) => !aberta)} aria-label="Buscar veículo ou frota" title="Buscar veículo ou frota"><Search size={14} /></button><button className="wsp-nav-toggle" onClick={onAlternar} aria-label="Recolher veículos" title="Recolher veículos"><ChevronLeft size={15} /></button></div>
+      {buscaAberta || busca ? <label className="wsp-nav-busca"><Search size={12} /><input autoFocus value={busca} onChange={(e) => onBusca(e.target.value)} placeholder="Veículo ou frota" aria-label="Filtrar veículos" />{busca ? <button onClick={onLimparBusca} aria-label="Limpar busca"><X size={12} /></button> : null}</label> : null}
     </header>
 
     <div className="wsp-nav-lista">
@@ -48,7 +53,7 @@ export function VehicleNavigator({ configs, selecionado, busca, onLimparBusca, o
             const vigente = perfilVigente(c);
             const ativo = c.veiculo === selecionado;
             return <li key={c.veiculo}>
-              <button className={`wsp-veiculo ${ativo ? "ativo" : ""}`} aria-current={ativo ? "true" : undefined} onClick={() => onSelecionar(c.veiculo)}>
+              <button className={`wsp-veiculo ${ativo ? "ativo" : ""}`} aria-current={ativo ? "true" : undefined} aria-label={`${c.veiculo} · ${c.frota} · ${vigente.perfil.nome} · ${statusSyncLabel[status]}`} title={`${vigente.perfil.nome} · ${statusSyncLabel[status]}`} onClick={() => onSelecionar(c.veiculo)}>
                 <Truck size={14} />
                 <span className="wsp-veiculo-copy">
                   <strong>{c.veiculo}</strong>

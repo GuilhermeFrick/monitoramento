@@ -1,13 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, LayoutGrid, Link2, List, Maximize2, Plus, ZoomIn, ZoomOut } from "lucide-react";
-import { proximasMacros, type ConfiguracaoVeiculo, type MacroVeiculo, type Transicao, type Validacao } from "../../domain";
+import { AlertTriangle, ChevronDown, LayoutGrid, Link2, List, Maximize2, Network, Plus, Truck, ZoomIn, ZoomOut } from "lucide-react";
+import { funcaoJornadaLabel, funcaoLogisticaLabel, perfilVigente, proximasMacros, statusConfig, statusSyncLabel, type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type Transicao, type Validacao } from "../../domain";
 
 export const NO_W = 168;
 export const NO_H = 62;
 const ESPACO_X = 232;
 const ESPACO_Y = 104;
+const LARGURA_MINIMA_VISTA = 760;
+const LARGURA_MAXIMA_NO_NA_TELA = 145;
 
 export type SelecaoGrafo = { tipo: "macro"; id: string } | { tipo: "transicao"; de: string; para: string } | { tipo: "padrao" };
+export type MacroCatalogo = { id: string; nome: string; descricao: string; tipo: MacroVeiculo["tipo"]; funcaoJornada: FuncaoJornada | null; funcaoLogistica: FuncaoLogistica | null };
+
+/**
+ * Catálogo de macros — o vocabulário que a operação fala.
+ *
+ * As funções seguem o padrão do sistema de referência (manual p. 684-686): uma
+ * macro pode avançar a jornada, a logística, ou as duas ao mesmo tempo.
+ */
+export const MACROS_CATALOGO: MacroCatalogo[] = [
+  { id: "CAT-JORNADA-INICIO", nome: "Início de jornada", descricao: "Motorista assume o veículo e abre a jornada.", tipo: "inicio", funcaoJornada: "inicio_jornada", funcaoLogistica: null },
+  { id: "CAT-VIAGEM-INICIO", nome: "Início de viagem", descricao: "Abre a viagem e começa a contar direção.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: "iniciar_viagem" },
+  { id: "CAT-VIAGEM-REINICIO", nome: "Reinício de viagem", descricao: "Volta a contar direção depois de uma parada — não reabre a viagem.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: null },
+  { id: "CAT-VIAGEM-FIM", nome: "Fim de viagem", descricao: "Encerra a viagem e entra em interjornada.", tipo: "fim", funcaoJornada: "inicio_interjornada", funcaoLogistica: "finalizar_viagem" },
+  { id: "CAT-CLIENTE-IN", nome: "Chegada no cliente", descricao: "Abre a operação no cliente; o tempo passa a contar como espera.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: "iniciar_operacao" },
+  { id: "CAT-CLIENTE-OUT", nome: "Saída do cliente", descricao: "Conclui a operação e retoma a direção.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: "concluir_operacao" },
+  { id: "CAT-OPERACAO-CANCELA", nome: "Cancelar operação", descricao: "Cancela a operação em curso no cliente.", tipo: "operacao", funcaoJornada: null, funcaoLogistica: "cancelar_operacao" },
+  { id: "CAT-REFEICAO", nome: "Parada para refeição", descricao: "Parada programada para refeição do motorista.", tipo: "operacao", funcaoJornada: "inicio_refeicao", funcaoLogistica: null },
+  { id: "CAT-ABASTECIMENTO", nome: "Parada para abastecimento", descricao: "Parada em posto para abastecer.", tipo: "operacao", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
+  { id: "CAT-PARADA-EVENTUAL", nome: "Parada eventual", descricao: "Parada não programada durante a viagem.", tipo: "operacao", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
+  { id: "CAT-PERNOITE", nome: "Parada para pernoite", descricao: "Veículo estacionado para pernoite autorizado.", tipo: "operacao", funcaoJornada: "inicio_interjornada", funcaoLogistica: null },
+  { id: "CAT-DESCANSO-SEMANAL", nome: "Descanso semanal", descricao: "Início do descanso semanal remunerado.", tipo: "fim", funcaoJornada: "inicio_descanso_semanal", funcaoLogistica: null },
+  { id: "CAT-FISCALIZACAO", nome: "Fiscalização", descricao: "Parada em posto fiscal, balança ou inspeção.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: null },
+  { id: "CAT-MANUTENCAO", nome: "Parada para manutenção", descricao: "Veículo parado para manutenção preventiva ou corretiva.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: null },
+  { id: "CAT-EMERGENCIA", nome: "Emergência", descricao: "Ativa o perfil de resposta imediata a uma emergência.", tipo: "operacao", funcaoJornada: null, funcaoLogistica: null },
+];
 
 type Caixa = { x: number; y: number; w: number; h: number };
 
@@ -63,13 +90,28 @@ function naBorda(origem: { x: number; y: number }, alvo: { x: number; y: number 
 
 const corta = (texto: string, max: number) => texto.length > max ? `${texto.slice(0, max - 1)}…` : texto;
 
-export function MacroGraphCanvas({ config, selecao, validacoes, onSelecionar, onMoverMacro, onCriarTransicao, onNovaMacro, onAutoLayout, onToast }: {
+/**
+ * O que a macro move — é o equivalente à coluna "Tipo" do controle de ponto do
+ * sistema de referência, que mostra a função de jornada ao lado da macro que a
+ * originou.
+ */
+function rotuloFuncoes(m: MacroVeiculo): string {
+  const partes: string[] = [];
+  if (m.funcaoJornada) partes.push(funcaoJornadaLabel[m.funcaoJornada].replace("Início de ", "▸ "));
+  if (m.funcaoLogistica) partes.push(funcaoLogisticaLabel[m.funcaoLogistica]);
+  return partes.length ? partes.join(" · ") : "só troca de perfil";
+}
+
+export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, onSelecionar, onAbrirEditor, onMoverMacro, onCriarTransicao, onAdicionarMacro, onNovaMacro, onAutoLayout, onToast }: {
   config: ConfiguracaoVeiculo;
   selecao: SelecaoGrafo;
   validacoes: Validacao[];
+  contextActions?: React.ReactNode;
   onSelecionar: (s: SelecaoGrafo) => void;
+  onAbrirEditor: (s: SelecaoGrafo) => void;
   onMoverMacro: (id: string, x: number, y: number) => void;
   onCriarTransicao: (de: string, para: string) => void;
+  onAdicionarMacro: (macro: MacroCatalogo) => void;
   onNovaMacro: () => void;
   onAutoLayout: () => void;
   onToast: (m: string) => void;
@@ -79,12 +121,19 @@ export function MacroGraphCanvas({ config, selecao, validacoes, onSelecionar, on
   const [vista, setVista] = useState<Caixa>({ x: 0, y: 0, w: 900, h: 420 });
   const [modoLigar, setModoLigar] = useState(false);
   const [ligando, setLigando] = useState<string | null>(null);
-  const [arrastando, setArrastando] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  const [arrastando, setArrastando] = useState<{ id: string; pointerId: number; dx: number; dy: number; origemX: number; origemY: number; x: number; y: number; moveu: boolean } | null>(null);
+  const [ligacao, setLigacao] = useState<{ de: string; pointerId: number; inicio: { x: number; y: number }; x: number; y: number; sobre: string | null } | null>(null);
   const [panorama, setPanorama] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null);
-  const [modoLista, setModoLista] = useState(false);
+  const [modo, setModo] = useState<"grafo" | "lista">("grafo");
+  const [catalogoAberto, setCatalogoAberto] = useState(false);
+  const ignorarClique = useRef(false);
+  const ultimoCliqueNo = useRef<{ id: string; em: number } | null>(null);
+  const catalogoRef = useRef<HTMLDivElement>(null);
 
   const erros = validacoes.filter((v) => v.nivel === "erro");
   const permitidasAgora = useMemo(() => proximasMacros(config, config.macroVigente).map((m) => m.id), [config]);
+  const vigente = perfilVigente(config);
+  const status = statusConfig(config);
 
   /** Converte coordenada de tela em coordenada do grafo. */
   const emGrafo = useCallback((clientX: number, clientY: number) => {
@@ -100,14 +149,24 @@ export function MacroGraphCanvas({ config, selecao, validacoes, onSelecionar, on
     const alvoW = caixa.w + margem * 2;
     const alvoH = caixa.h + margem * 2;
     const proporcao = r && r.height ? r.width / r.height : alvoW / alvoH;
+    // Um grafo com poucos nós não deve ser ampliado até ocupar toda a tela.
+    // Esta escala mantém cada nó com no máximo ~145 px na tela e preserva uma
+    // área de trabalho confortável ao redor dele.
+    const larguraConfortavel = r?.width ? r.width * (NO_W / LARGURA_MAXIMA_NO_NA_TELA) : LARGURA_MINIMA_VISTA;
     // preserva a proporção do palco para o grafo não distorcer
-    const w = Math.max(alvoW, alvoH * proporcao);
+    const w = Math.max(LARGURA_MINIMA_VISTA, larguraConfortavel, alvoW, alvoH * proporcao);
     const h = w / proporcao;
     setVista({ x: caixa.x - (w - caixa.w) / 2, y: caixa.y - (h - caixa.h) / 2, w, h });
   }, [config.macros]);
 
   // ajusta ao abrir e ao trocar de veículo
-  useEffect(() => { ajustar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [config.veiculo]);
+  useEffect(() => { ajustar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [config.veiculo, config.macros.length]);
+  useEffect(() => {
+    if (!catalogoAberto) return;
+    const fechar = (e: PointerEvent) => { if (!catalogoRef.current?.contains(e.target as Node)) setCatalogoAberto(false); };
+    document.addEventListener("pointerdown", fechar);
+    return () => document.removeEventListener("pointerdown", fechar);
+  }, [catalogoAberto]);
 
   const zoom = (fator: number) => setVista((v) => {
     const w = Math.min(4000, Math.max(320, v.w * fator));
@@ -125,92 +184,179 @@ export function MacroGraphCanvas({ config, selecao, validacoes, onSelecionar, on
   };
 
   const teclaNo = (e: React.KeyboardEvent, m: MacroVeiculo) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); clicarNo(m.id); return; }
+    if (e.key === "Enter") { e.preventDefault(); onAbrirEditor({ tipo: "macro", id: m.id }); return; }
+    if (e.key === " ") { e.preventDefault(); clicarNo(m.id); return; }
     const passo = e.shiftKey ? 24 : 8;
     const mapa: Record<string, [number, number]> = { ArrowUp: [0, -passo], ArrowDown: [0, passo], ArrowLeft: [-passo, 0], ArrowRight: [passo, 0] };
     const delta = mapa[e.key];
-    if (delta) { e.preventDefault(); onMoverMacro(m.id, Math.max(0, m.x + delta[0]), Math.max(0, m.y + delta[1])); }
+    if (delta) { e.preventDefault(); onMoverMacro(m.id, m.x + delta[0], m.y + delta[1]); }
+  };
+
+  const posicaoMacro = (m: MacroVeiculo) => arrastando?.id === m.id ? { ...m, x: arrastando.x, y: arrastando.y } : m;
+
+  const moverPonteiro = (e: React.PointerEvent<SVGSVGElement>) => {
+    const p = emGrafo(e.clientX, e.clientY);
+    if (ligacao?.pointerId === e.pointerId) {
+      const sobre = config.macros.find((m) => m.id !== ligacao.de && p.x >= m.x && p.x <= m.x + NO_W && p.y >= m.y && p.y <= m.y + NO_H)?.id ?? null;
+      setLigacao((atual) => atual ? { ...atual, x: p.x, y: p.y, sobre } : null);
+      return;
+    }
+    if (arrastando?.pointerId === e.pointerId) {
+      const x = p.x - arrastando.dx;
+      const y = p.y - arrastando.dy;
+      setArrastando((atual) => atual ? { ...atual, x, y, moveu: atual.moveu || Math.hypot(x - atual.origemX, y - atual.origemY) > 2 } : null);
+      return;
+    }
+    if (panorama) setVista((v) => ({ ...v, x: panorama.vx + (panorama.x - p.x), y: panorama.vy + (panorama.y - p.y) }));
+  };
+
+  const soltarPonteiro = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (ligacao?.pointerId === e.pointerId) {
+      if (ligacao.sobre) {
+        if (config.transicoes.some((t) => t.de === ligacao.de && t.para === ligacao.sobre)) onToast("Essa transição já existe.");
+        else onCriarTransicao(ligacao.de, ligacao.sobre);
+      }
+      setLigacao(null);
+    } else if (arrastando?.pointerId === e.pointerId) {
+      if (arrastando.moveu) {
+        ignorarClique.current = true;
+        onMoverMacro(arrastando.id, arrastando.x, arrastando.y);
+        window.setTimeout(() => { ignorarClique.current = false; }, 0);
+      } else {
+        const agora = performance.now();
+        const anterior = ultimoCliqueNo.current;
+        if (anterior?.id === arrastando.id && agora - anterior.em <= 500) {
+          ultimoCliqueNo.current = null;
+          onAbrirEditor({ tipo: "macro", id: arrastando.id });
+        } else {
+          ultimoCliqueNo.current = { id: arrastando.id, em: agora };
+          onSelecionar({ tipo: "macro", id: arrastando.id });
+        }
+      }
+      setArrastando(null);
+    }
+    setPanorama(null);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const iniciarLigacao = (e: React.PointerEvent<SVGCircleElement>, m: MacroVeiculo, x: number, y: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    svgRef.current?.setPointerCapture(e.pointerId);
+    onSelecionar({ tipo: "macro", id: m.id });
+    setLigacao({ de: m.id, pointerId: e.pointerId, inicio: { x: m.x + x, y: m.y + y }, x: m.x + x, y: m.y + y, sobre: null });
+  };
+
+  const caminhoCurvo = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const direcao = b.x >= a.x ? 1 : -1;
+    const curva = Math.max(46, Math.abs(b.x - a.x) * .45);
+    return `M ${a.x} ${a.y} C ${a.x + curva * direcao} ${a.y}, ${b.x - curva * direcao} ${b.y}, ${b.x} ${b.y}`;
   };
 
   return <section className="wsp-canvas-wrap" aria-label="Sequência de macros">
     <header className="wsp-canvas-toolbar">
-      <div className="wsp-canvas-titulo">
-        <h2>Sequência de macros</h2>
-        <p>Cada caixa é um comportamento que o motorista informa; a seta é uma transição permitida.</p>
+      <div className="wsp-canvas-veiculo">
+        <Truck size={14} />
+        <strong>{config.veiculo}</strong>
+        <span>{vigente.perfil.nome}</span>
+        <i className={`wsp-status wsp-status-${status}`}>{config.mudancas.length ? `${config.mudancas.length} pendente${config.mudancas.length > 1 ? "s" : ""}` : statusSyncLabel[status]}</i>
       </div>
       <div className="wsp-canvas-acoes">
-        <div className="wsp-btn-grupo" role="group" aria-label="Zoom">
+        <div className="wsp-modo" role="group" aria-label="Modo de visualização">
+          <button className={modo === "grafo" ? "ativo" : ""} aria-pressed={modo === "grafo"} onClick={() => setModo("grafo")}><Network size={14} /> Grafo</button>
+          <button className={modo === "lista" ? "ativo" : ""} aria-pressed={modo === "lista"} onClick={() => setModo("lista")}><List size={14} /> Lista</button>
+        </div>
+        <div className={`wsp-btn-grupo ${modo === "lista" ? "oculto" : ""}`} role="group" aria-label="Zoom">
           <button className="wsp-icone" onClick={() => zoom(1 / 0.8)} aria-label="Afastar"><ZoomOut size={15} /></button>
           <button className="wsp-icone" onClick={() => zoom(0.8)} aria-label="Aproximar"><ZoomIn size={15} /></button>
           <button className="wsp-icone" onClick={ajustar} aria-label="Ajustar à tela" title="Ajustar à tela"><Maximize2 size={15} /></button>
         </div>
-        <button className="wsp-btn" onClick={onAutoLayout}><LayoutGrid size={14} /> Organizar</button>
-        <button className={`wsp-btn ${modoLigar ? "ativo" : ""}`} aria-pressed={modoLigar} onClick={() => { setModoLigar(!modoLigar); setLigando(null); }}>
-          <Link2 size={14} /> {modoLigar ? (ligando ? "Clique o destino" : "Clique a origem") : "Ligar"}
-        </button>
-        <button className="wsp-btn" onClick={onNovaMacro}><Plus size={14} /> Macro</button>
-        <button className={`wsp-btn ${modoLista ? "ativo" : ""}`} aria-pressed={modoLista} onClick={() => setModoLista(!modoLista)}><List size={14} /> Lista</button>
+        <button className={`wsp-btn ${modo === "lista" ? "oculto" : ""}`} aria-label="Organizar grafo" title="Organizar grafo" onClick={onAutoLayout}><LayoutGrid size={14} /><span>Organizar</span></button>
+        <button className={`wsp-btn ${modoLigar ? "ativo" : ""} ${modo === "lista" ? "oculto" : ""}`} aria-label={modoLigar ? (ligando ? "Selecionar destino da ligação" : "Selecionar origem da ligação") : "Ligar macros"} title="Ligar macros" aria-pressed={modoLigar} onClick={() => { setModoLigar(!modoLigar); setLigando(null); }}><Link2 size={14} /><span>{modoLigar ? (ligando ? "Clique o destino" : "Clique a origem") : "Ligar"}</span></button>
+        <div className="wsp-add-macro" ref={catalogoRef}>
+          <button className={`wsp-btn ${catalogoAberto ? "ativo" : ""}`} aria-label="Adicionar macro" title="Adicionar macro" aria-haspopup="menu" aria-expanded={catalogoAberto} onClick={() => setCatalogoAberto((aberto) => !aberto)}><Plus size={14} /><span>Macro</span><ChevronDown className="wsp-add-seta" size={12} /></button>
+          {catalogoAberto ? <div className="wsp-catalogo" role="menu" aria-label="Catálogo de macros">
+            <div className="wsp-catalogo-head"><strong>Adicionar macro</strong><small>Selecione uma macro cadastrada</small></div>
+            <div className="wsp-catalogo-lista">{MACROS_CATALOGO.map((item) => {
+              const adicionada = config.macros.some((m) => m.nome.trim().toLocaleLowerCase("pt-BR") === item.nome.toLocaleLowerCase("pt-BR"));
+              return <button key={item.id} role="menuitem" disabled={adicionada} onClick={() => { onAdicionarMacro(item); setCatalogoAberto(false); }}>
+                <span><strong>{item.nome}</strong><small>{item.descricao}</small></span>
+                {adicionada ? <i>No grafo</i> : <Plus size={14} />}
+              </button>;
+            })}</div>
+            <button className="wsp-catalogo-criar" role="menuitem" onClick={() => { setCatalogoAberto(false); onNovaMacro(); }}><Plus size={14} /><span><strong>Criar nova macro</strong><small>Cadastre uma opção personalizada</small></span></button>
+          </div> : null}
+        </div>
+        {contextActions}
       </div>
     </header>
 
-    {erros.length ? <button className="wsp-canvas-erros" onClick={() => { const alvo = erros.find((e) => e.macroId); if (alvo?.macroId) onSelecionar({ tipo: "macro", id: alvo.macroId }); }}>
+    {erros.length ? <button className="wsp-canvas-erros" onClick={() => { const alvo = erros.find((e) => e.macroId); if (alvo?.macroId) onAbrirEditor({ tipo: "macro", id: alvo.macroId }); }}>
       <AlertTriangle size={14} /> {erros.length} problema(s) impedem o embarque — ir para o primeiro
     </button> : null}
 
-    {modoLista
-      ? <ListaMacros config={config} selecao={selecao} onSelecionar={onSelecionar} />
+    {modo === "lista"
+      ? <ListaMacros config={config} selecao={selecao} onSelecionar={onSelecionar} onAbrirEditor={onAbrirEditor} />
       : <div className="wsp-canvas-stage" ref={stageRef}>
           <svg
             ref={svgRef} className="wsp-canvas-svg" viewBox={`${vista.x} ${vista.y} ${vista.w} ${vista.h}`} preserveAspectRatio="xMidYMid meet"
-            onPointerDown={(e) => { if (e.target === svgRef.current) { const p = emGrafo(e.clientX, e.clientY); setPanorama({ x: p.x, y: p.y, vx: vista.x, vy: vista.y }); } }}
-            onPointerMove={(e) => {
-              if (arrastando) { const p = emGrafo(e.clientX, e.clientY); onMoverMacro(arrastando.id, Math.max(0, p.x - arrastando.dx), Math.max(0, p.y - arrastando.dy)); return; }
-              if (panorama) { const p = emGrafo(e.clientX, e.clientY); setVista((v) => ({ ...v, x: panorama.vx + (panorama.x - p.x), y: panorama.vy + (panorama.y - p.y) })); }
-            }}
-            onPointerUp={() => { setArrastando(null); setPanorama(null); }}
-            onPointerLeave={() => { setArrastando(null); setPanorama(null); }}
+            onPointerDown={(e) => { if (e.target === svgRef.current) { e.currentTarget.setPointerCapture(e.pointerId); const p = emGrafo(e.clientX, e.clientY); setPanorama({ x: p.x, y: p.y, vx: vista.x, vy: vista.y }); } }}
+            onPointerMove={moverPonteiro}
+            onPointerUp={soltarPonteiro}
+            onPointerCancel={soltarPonteiro}
           >
             <defs>
               <marker id="wsp-seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9fb2c2" /></marker>
-              <marker id="wsp-seta-ativa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f8c7e" /></marker>
+              <marker id="wsp-seta-ativa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5880fb" /></marker>
               <marker id="wsp-seta-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c8102e" /></marker>
             </defs>
 
+            {ligacao ? <g className="wsp-ligacao-preview" aria-hidden="true">
+              <path d={caminhoCurvo(ligacao.inicio, { x: ligacao.x, y: ligacao.y })} markerEnd="url(#wsp-seta-ativa)" />
+              <circle cx={ligacao.x} cy={ligacao.y} r={7} />
+            </g> : null}
+
             {config.transicoes.map((t) => {
-              const de = config.macros.find((m) => m.id === t.de);
-              const para = config.macros.find((m) => m.id === t.para);
-              if (!de || !para) return null;
+              const deOriginal = config.macros.find((m) => m.id === t.de);
+              const paraOriginal = config.macros.find((m) => m.id === t.para);
+              if (!deOriginal || !paraOriginal) return null;
+              const de = posicaoMacro(deOriginal);
+              const para = posicaoMacro(paraOriginal);
               const c1 = { x: de.x + NO_W / 2, y: de.y + NO_H / 2 };
               const c2 = { x: para.x + NO_W / 2, y: para.y + NO_H / 2 };
               const i = naBorda(c2, c1);
               const f = naBorda(c1, c2);
-              const ativa = config.macroVigente === t.de;
+              const ativa = selecao.tipo === "macro" ? selecao.id === t.de : config.macroVigente === t.de;
               const sel = selecao.tipo === "transicao" && selecao.de === t.de && selecao.para === t.para;
-              return <g key={`${t.de}->${t.para}`} className={`wsp-aresta ${ativa ? "ativa" : ""} ${sel ? "sel" : ""}`} onClick={() => onSelecionar({ tipo: "transicao", de: t.de, para: t.para })}>
-                <line x1={i.x} y1={i.y} x2={f.x} y2={f.y} strokeWidth={16} stroke="transparent" />
-                <line x1={i.x} y1={i.y} x2={f.x} y2={f.y} markerEnd={`url(#${sel ? "wsp-seta-sel" : ativa ? "wsp-seta-ativa" : "wsp-seta"})`} />
+              const escolha: SelecaoGrafo = { tipo: "transicao", de: t.de, para: t.para };
+              const caminho = caminhoCurvo(i, f);
+              return <g key={`${t.de}->${t.para}`} className={`wsp-aresta ${ativa ? "ativa" : ""} ${sel ? "sel" : ""}`} onClick={() => onSelecionar(escolha)} onDoubleClick={(e) => { e.stopPropagation(); onAbrirEditor(escolha); }}>
+                <path d={caminho} className="wsp-aresta-alvo" />
+                <path d={caminho} className="wsp-aresta-linha" markerEnd={`url(#${sel ? "wsp-seta-sel" : ativa ? "wsp-seta-ativa" : "wsp-seta"})`} />
               </g>;
             })}
 
             {config.macros.map((m) => {
+              const posicao = posicaoMacro(m);
               const sel = selecao.tipo === "macro" && selecao.id === m.id;
               const vigente = config.macroVigente === m.id;
               const disponivel = permitidasAgora.includes(m.id);
               const comErro = erros.some((e) => e.macroId === m.id);
-              const saidas = config.transicoes.filter((t) => t.de === m.id).length;
               return <g
-                key={m.id} transform={`translate(${m.x},${m.y})`} tabIndex={0} role="button"
-                aria-label={`${m.nome}, perfil ${m.perfil.nome}${vigente ? ", em curso neste veículo" : ""}`} aria-pressed={sel}
-                className={`wsp-no ${sel ? "sel" : ""} ${vigente ? "vigente" : ""} ${ligando === m.id ? "ligando" : ""} ${disponivel ? "disponivel" : ""} ${comErro ? "erro" : ""}`}
-                onPointerDown={(e) => { if (modoLigar) return; e.stopPropagation(); const p = emGrafo(e.clientX, e.clientY); setArrastando({ id: m.id, dx: p.x - m.x, dy: p.y - m.y }); }}
-                onClick={() => clicarNo(m.id)}
+                key={m.id} transform={`translate(${posicao.x},${posicao.y})`} tabIndex={0} role="button"
+                aria-label={`${m.nome}, perfil ${m.perfil.nome}${vigente ? ", em curso neste veículo" : ""}. Clique para selecionar; clique duas vezes para editar.`} aria-pressed={sel}
+                className={`wsp-no ${sel ? "sel" : ""} ${vigente ? "vigente" : ""} ${ligando === m.id ? "ligando" : ""} ${ligacao?.sobre === m.id ? "alvo" : ""} ${arrastando?.id === m.id ? "arrastando" : ""} ${disponivel ? "disponivel" : ""} ${comErro ? "erro" : ""}`}
+                onPointerDown={(e) => { if (modoLigar || ligacao) return; e.preventDefault(); e.stopPropagation(); svgRef.current?.setPointerCapture(e.pointerId); const p = emGrafo(e.clientX, e.clientY); setArrastando({ id: m.id, pointerId: e.pointerId, dx: p.x - m.x, dy: p.y - m.y, origemX: m.x, origemY: m.y, x: m.x, y: m.y, moveu: false }); }}
+                onClick={() => { if (modoLigar && !ignorarClique.current) clicarNo(m.id); }}
                 onKeyDown={(e) => teclaNo(e, m)}
               >
+                <title>{`${m.nome}: arraste para mover; duplo clique para editar; arraste um ponto azul para ligar.`}</title>
                 <rect width={NO_W} height={NO_H} rx={10} />
                 <text className="wsp-no-nome" x={12} y={22}>{corta(m.nome, 21)}</text>
                 <text className="wsp-no-perfil" x={12} y={39}>perfil: {corta(m.perfil.nome, 19)}</text>
-                <text className="wsp-no-tag" x={12} y={53}>{m.tipo === "inicio" ? "início" : m.tipo === "fim" ? "fim da sequência" : `${saidas} saída(s)`}{vigente ? " · em curso" : ""}</text>
+                <text className="wsp-no-tag" x={12} y={53}>{corta(rotuloFuncoes(m), 30)}</text>
                 {comErro ? <circle className="wsp-no-erro" cx={NO_W - 15} cy={15} r={5} /> : vigente ? <circle className="wsp-no-dot" cx={NO_W - 15} cy={15} r={5} /> : null}
+                {[[NO_W / 2, 0], [NO_W, NO_H / 2], [NO_W / 2, NO_H], [0, NO_H / 2]].map(([x, y], indice) => <circle key={indice} className="wsp-conector" cx={x} cy={y} r={6} onPointerDown={(e) => iniciarLigacao(e, m, x, y)} />)}
               </g>;
             })}
           </svg>
@@ -219,12 +365,12 @@ export function MacroGraphCanvas({ config, selecao, validacoes, onSelecionar, on
     <footer className="wsp-canvas-legenda">
       <span><i className="vigente" /> em curso agora</span>
       <span><i className="disponivel" /> pode ser registrada a seguir</span>
-      <span>Clique para editar · arraste ou use as setas do teclado para mover</span>
+      <span>1 clique seleciona · 2 cliques editam · arraste os pontos azuis para ligar</span>
     </footer>
   </section>;
 }
 
-function ListaMacros({ config, selecao, onSelecionar }: { config: ConfiguracaoVeiculo; selecao: SelecaoGrafo; onSelecionar: (s: SelecaoGrafo) => void }) {
+function ListaMacros({ config, selecao, onSelecionar, onAbrirEditor }: { config: ConfiguracaoVeiculo; selecao: SelecaoGrafo; onSelecionar: (s: SelecaoGrafo) => void; onAbrirEditor: (s: SelecaoGrafo) => void }) {
   return <div className="wsp-lista-macros">
     <table>
       <thead><tr><th>MACRO</th><th>PAPEL</th><th>PERFIL</th><th>PODE IR PARA</th></tr></thead>
@@ -232,7 +378,7 @@ function ListaMacros({ config, selecao, onSelecionar }: { config: ConfiguracaoVe
         const saidas = config.transicoes.filter((t) => t.de === m.id);
         const sel = selecao.tipo === "macro" && selecao.id === m.id;
         return <tr key={m.id} className={sel ? "sel" : ""}>
-          <td><button className="wsp-link" onClick={() => onSelecionar({ tipo: "macro", id: m.id })}>{m.nome}</button>{config.macroVigente === m.id ? <span className="wsp-badge-vigente">em curso</span> : null}</td>
+          <td><button className="wsp-link" onClick={() => onSelecionar({ tipo: "macro", id: m.id })} onDoubleClick={() => onAbrirEditor({ tipo: "macro", id: m.id })}>{m.nome}</button>{config.macroVigente === m.id ? <span className="wsp-badge-vigente">em curso</span> : null}</td>
           <td>{m.tipo === "inicio" ? "Início" : m.tipo === "fim" ? "Fim" : "Operação"}</td>
           <td>{m.perfil.nome}</td>
           <td>{saidas.length ? saidas.map((t) => config.macros.find((x) => x.id === t.para)?.nome ?? t.para).join(", ") : <em>nenhuma</em>}</td>
