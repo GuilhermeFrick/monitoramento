@@ -61,7 +61,8 @@ import {
 } from "lucide-react";
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
 import { equipamentoDe } from "./risk/domain";
-import { ProfilesView, usePerfis } from "./risk/views/ProfilesView";
+import { ProfilesView, useConfiguracoes } from "./risk/views/ProfilesView";
+import { VehicleNavigator } from "./risk/views/perfil/VehicleNavigator";
 import { ControlPointsView, usePontos } from "./risk/views/ControlPointsView";
 import { FencesView } from "./risk/views/FencesView";
 import { RoutesView } from "./risk/views/RoutesView";
@@ -316,7 +317,7 @@ function MainApp() {
   const [entityForm, setEntityForm] = useState<"fleet" | "drivers" | "training" | "traffic" | "settings" | null>(null);
   const [toast, setToast] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [perfis, setPerfis] = usePerfis();
+  const [configs, setConfigs] = useConfiguracoes();
   const [pontos, setPontos] = usePontos();
   const title = useMemo(() => [...navGroups.flatMap((g) => g.items), { id: "settings", label: "Configurações" }].find((item) => item.id === activeView)?.label ?? "Visão geral", [activeView]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3000); };
@@ -328,18 +329,18 @@ function MainApp() {
   const entityView = activeView as "fleet" | "drivers" | "training" | "traffic" | "settings";
   const body = activeView === "dashboard" ? <Dashboard search={search} onSelectRisk={openRisk} onToast={notify} onNavigate={chooseView} />
     : activeView === "risks" ? <RisksView risks={risks} search={search} onSelectRisk={openRisk} onCommand={openCommand} />
-    : activeView === "events" ? <EventsView pontos={pontos} perfis={perfis} onToast={notify} onCommand={openCommand} />
+    : activeView === "events" ? <EventsView pontos={pontos} onToast={notify} onCommand={openCommand} />
     : activeView === "realtime" ? <RealtimeView onSelectRisk={openRisk} onToast={notify} onCommand={openCommand} />
     : activeView === "evidence" ? <EvidenceView onToast={notify} />
     : activeView === "reports" ? <ReportsView onToast={notify} />
-    : activeView === "profiles" ? <ProfilesView pontos={pontos} perfis={perfis} setPerfis={setPerfis} onToast={notify} />
-    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} perfis={perfis} onToast={notify} />
+    : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} busca={search} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
+    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} onToast={notify} />
     : activeView === "fences" ? <FencesView onToast={notify} />
     : activeView === "routes" ? <RoutesView onToast={notify} onGoRotograma={() => chooseView("controlpoints")} />
-    : activeView === "provisioning" ? <ProvisioningView pontos={pontos} perfis={perfis} onToast={notify} />
+    : activeView === "provisioning" ? <ProvisioningView pontos={pontos} onToast={notify} />
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;
-  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><div className={sidebarOpen ? "sidebar sidebar-open" : "sidebar"}><Sidebar active={activeView} onSelect={chooseView} /></div><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} /><main className="content">{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
+  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><div className={sidebarOpen ? "sidebar sidebar-open" : "sidebar"}><Sidebar active={activeView} onSelect={chooseView} /></div><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} /><main className={activeView === "profiles" ? "content content-workspace" : "content"}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
 }
 
 export default function Home() {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Check, Eraser, HardDriveUpload, Layers, Pin, RefreshCw, Send, X } from "lucide-react";
 import { Callout, KpiCard, Modal, PageHeader, SectionTitle, Tag, formatDateTime, useStoredState } from "../shared";
-import { STORAGE, catalogo, embarquesIniciais, equipamentos, newId, tipoItemLabel, type CatalogoItem, type Embarque, type ItemEmbarque, type PerfilOperacional, type PontoDeControle, type TipoItemEmbarque } from "../domain";
+import { STORAGE, configuracoesIniciais, catalogo, embarquesIniciais, equipamentos, newId, tipoItemLabel, type CatalogoItem, type Embarque, type ItemEmbarque, type PontoDeControle, type TipoItemEmbarque } from "../domain";
 
 type Validacao = { ok: boolean; erros: string[] };
 
@@ -24,14 +24,14 @@ function validarEmissao(selecionados: CatalogoItem[], veiculo: string, embarques
   return { ok: erros.length === 0, erros: Array.from(new Set(erros)) };
 }
 
-export function ProvisioningView({ pontos, perfis, onToast }: { pontos: PontoDeControle[]; perfis: PerfilOperacional[]; onToast: (message: string) => void }) {
+export function ProvisioningView({ pontos, onToast }: { pontos: PontoDeControle[]; onToast: (message: string) => void }) {
   const [embarques, setEmbarques] = useStoredState<Embarque[]>(STORAGE.embarques, embarquesIniciais);
   const [tab, setTab] = useState<"embarques" | "catalogo">("embarques");
   const [selectedId, setSelectedId] = useState(embarques[0]?.id ?? "");
   const [showEmit, setShowEmit] = useState(false);
   const [showClean, setShowClean] = useState(false);
   const embarque = embarques.find((e) => e.id === selectedId) ?? embarques[0];
-  const catalogoAtual = useMemo<CatalogoItem[]>(() => catalogo.map((item) => { const p = perfis.find((x) => x.id === item.id); const pc = pontos.find((x) => x.id === item.id); return p ? { ...item, versao: p.versao, nome: p.nome } : pc ? { ...item, versao: pc.versao, nome: pc.nome, dependeDe: [pc.politica.perfil] } : item; }), [perfis, pontos]);
+    const catalogoAtual = useMemo<CatalogoItem[]>(() => catalogo.map((item) => { const pc = pontos.find((x) => x.id === item.id); return pc ? { ...item, versao: pc.versao, nome: pc.nome } : item; }), [pontos]);
   const pendentes = embarques.flatMap((e) => e.itens).filter((i) => i.aceite === "pendente").length;
   const rejeitados = embarques.flatMap((e) => e.itens).filter((i) => i.aceite === "rejeitado").length;
 
@@ -42,7 +42,7 @@ export function ProvisioningView({ pontos, perfis, onToast }: { pontos: PontoDeC
 
   return <>
     <PageHeader eyebrow="O que está no equipamento" title="Provisionamento" description="Catálogo versionado do qual os embarques são emitidos. Cada item é aceito ou rejeitado individualmente pelo equipamento." action="Emitir embarque" actionIcon={Send} onAction={() => setShowEmit(true)} />
-    <div className="kpi-grid"><KpiCard label="Embarques emitidos" value={String(embarques.length).padStart(2, "0")} meta="Últimas 24 h" icon={HardDriveUpload} /><KpiCard label="Itens aguardando aceite" value={String(pendentes).padStart(2, "0")} meta="Equipamentos ainda não responderam" icon={RefreshCw} tone="amber" /><KpiCard label="Itens rejeitados" value={String(rejeitados).padStart(2, "0")} meta="Corrigir e reenviar" icon={AlertTriangle} tone="red" /><KpiCard label="Itens no catálogo" value={String(catalogoAtual.length)} meta={`${perfis.filter((p) => p.status === "publicado").length} perfis publicados`} icon={Layers} /></div>
+    <div className="kpi-grid"><KpiCard label="Embarques emitidos" value={String(embarques.length).padStart(2, "0")} meta="Últimas 24 h" icon={HardDriveUpload} /><KpiCard label="Itens aguardando aceite" value={String(pendentes).padStart(2, "0")} meta="Equipamentos ainda não responderam" icon={RefreshCw} tone="amber" /><KpiCard label="Itens rejeitados" value={String(rejeitados).padStart(2, "0")} meta="Corrigir e reenviar" icon={AlertTriangle} tone="red" /><KpiCard label="Itens no catálogo" value={String(catalogoAtual.length)} meta={`${configuracoesIniciais.length} políticas de veículo`} icon={Layers} /></div>
     <div className="segmented" style={{ marginBottom: 16 }}><button className={tab === "embarques" ? "active" : ""} onClick={() => setTab("embarques")}>Embarques</button><button className={tab === "catalogo" ? "active" : ""} onClick={() => setTab("catalogo")}>Catálogo versionado</button></div>
 
     {tab === "embarques" ? <div className="split-layout">

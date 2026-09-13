@@ -501,3 +501,232 @@ tbody tr:hover { background: #fbfdfd; }
 .msg-meta .read { color: #258776; display: inline-flex; align-items: center; gap: 3px; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 @media (max-width: 900px) { .split-layout, .option-cards, .two-pass, .catalog-pick { grid-template-columns: 1fr; } .trecho-grid { grid-template-columns: repeat(2, 1fr); } .event-card { grid-template-columns: 56px 22px 1fr; } .event-side { grid-column: 1 / -1; flex-direction: row; } .level-scale { grid-template-columns: repeat(2, 1fr); } }
+
+
+/* =========================================================================
+   Perfil operacional — workspace de tres paineis em altura de viewport
+   O documento nao rola: quem rola e a lista de veiculos, o canvas e o inspetor.
+   ========================================================================= */
+
+.content-workspace { padding: 0; max-width: none; height: calc(100dvh - 72px); overflow: hidden; }
+
+.wsp { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; background: #f6f9fa; }
+
+/* --------------------------------------------------------- barra do workspace */
+.wsp-header { flex: 0 0 auto; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 12px 20px; background: #fff; border-bottom: 1px solid #e4ebef; }
+.wsp-header-id { display: flex; align-items: center; gap: 10px; color: #0f7c75; min-width: 210px; }
+.wsp-header-id h1 { font-size: 17px; letter-spacing: -.02em; margin: 0; color: #182a3d; }
+.wsp-header-id p { margin: 2px 0 0; font-size: 12px; color: #64748b; }
+.wsp-header-id strong { color: #0f716b; }
+.wsp-header-estado { display: flex; flex-direction: column; gap: 3px; margin-right: auto; min-width: 0; }
+.wsp-header-meta { font-size: 12px; color: #7b8896; }
+.wsp-header-acoes { display: flex; align-items: center; gap: 8px; }
+
+.wsp-status { font-size: 11px; font-weight: 800; letter-spacing: .02em; padding: 3px 9px; border-radius: 999px; width: fit-content; }
+.wsp-status-sincronizado { background: #e7f6f1; color: #0d6b60; }
+.wsp-status-rascunho { background: #fdf2df; color: #8a5a12; }
+.wsp-status-falha { background: #fdecec; color: #a32d29; }
+.wsp-status-nunca_embarcado { background: #eef2f4; color: #62717f; }
+
+/* ---------------------------------------------------------------- botoes base */
+.wsp-btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #dbe4e9; background: #fff;
+  color: #46596c; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.wsp-btn:hover:not(:disabled) { border-color: #a7d5ce; color: #0f716b; }
+.wsp-btn.ativo { background: #0f7c75; border-color: #0f7c75; color: #fff; }
+.wsp-btn.primario { background: #0f7c75; border-color: #0f7c75; color: #fff; }
+.wsp-btn.primario:hover:not(:disabled) { background: #09665f; color: #fff; }
+.wsp-btn.perigo { border-color: #f0cdcb; color: #a32d29; }
+.wsp-btn.perigo:hover { background: #fdecec; border-color: #e3aaa7; }
+.wsp-btn:disabled { opacity: .45; cursor: not-allowed; }
+.wsp-icone { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #dbe4e9;
+  background: #fff; color: #526276; border-radius: 8px; }
+.wsp-icone:hover { border-color: #a7d5ce; color: #0f7c75; }
+.wsp-btn-grupo { display: flex; gap: 4px; }
+.wsp-link { background: none; border: 0; color: #0f716b; font-size: 12px; font-weight: 700; text-decoration: underline; padding: 0 4px; }
+.wsp :focus-visible, .wsp-no:focus-visible { outline: 2px solid #0f7c75; outline-offset: 2px; border-radius: 6px; }
+
+/* ------------------------------------------------------------ corpo: 3 colunas */
+.wsp-corpo { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: 244px minmax(0, 1fr) 392px; gap: 1px; background: #e4ebef; }
+.wsp-corpo.sem-inspetor { grid-template-columns: 244px minmax(0, 1fr); }
+.wsp-corpo > section, .wsp-corpo > aside { background: #fff; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+/* -------------------------------------------------------------- painel veiculos */
+.wsp-nav-head { flex: 0 0 auto; padding: 14px 14px 10px; border-bottom: 1px solid #eef2f4; }
+.wsp-nav-titulo { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; color: #24384d; text-transform: uppercase; letter-spacing: .08em; }
+.wsp-nav-titulo span { background: #eef2f4; color: #62717f; border-radius: 999px; padding: 1px 7px; font-size: 11px; letter-spacing: 0; }
+.wsp-nav-dica { margin: 7px 0 0; font-size: 12px; color: #8a97a4; line-height: 1.4; }
+.wsp-filtro-chip { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; background: #eef7f5;
+  border: 1px solid #cfe8e2; color: #0f716b; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.wsp-nav-lista { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
+.wsp-frota-head { width: 100%; display: flex; align-items: center; gap: 7px; background: none; border: 0;
+  padding: 8px 7px; font-size: 12px; font-weight: 800; color: #37495c; border-radius: 7px; }
+.wsp-frota-head:hover { background: #f4f8f9; }
+.wsp-frota-head strong { margin-left: auto; color: #9aa6b1; font-size: 11px; font-weight: 700; }
+.wsp-frota-veiculos { list-style: none; margin: 0 0 4px; padding: 0 0 0 8px; }
+.wsp-veiculo { width: 100%; display: flex; align-items: center; gap: 9px; background: none; border: 0;
+  padding: 9px 8px; border-radius: 7px; color: #46596c; text-align: left; }
+.wsp-veiculo:hover { background: #f4f8f9; }
+.wsp-veiculo.ativo { background: #eaf7f4; color: #0d6b60; }
+.wsp-veiculo-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.wsp-veiculo-copy strong { font-size: 12.5px; font-weight: 800; }
+.wsp-veiculo-copy small { font-size: 11.5px; color: #8a97a4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsp-veiculo .wsp-status { font-size: 10px; padding: 2px 7px; }
+.wsp-vazio { padding: 14px; font-size: 12px; color: #8a97a4; }
+
+/* ----------------------------------------------------------------- painel grafo */
+.wsp-canvas-wrap { min-width: 0; }
+.wsp-canvas-toolbar { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; padding: 13px 16px; border-bottom: 1px solid #eef2f4; }
+.wsp-canvas-titulo h2 { margin: 0; font-size: 13.5px; color: #24384d; letter-spacing: -.01em; }
+.wsp-canvas-titulo p { margin: 3px 0 0; font-size: 12px; color: #7b8896; max-width: 52ch; }
+.wsp-canvas-acoes { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.wsp-canvas-erros { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: #fdecec; border: 0; border-bottom: 1px solid #f5d5d3; color: #a32d29; padding: 9px 16px; font-size: 12px; font-weight: 700; }
+.wsp-canvas-erros:hover { background: #fbe2e1; }
+.wsp-canvas-stage { flex: 1; min-height: 0; overflow: hidden; background:
+  linear-gradient(#f1f6f7 1px, transparent 1px) 0 0 / 100% 26px,
+  linear-gradient(90deg, #f1f6f7 1px, transparent 1px) 0 0 / 26px 100%, #fbfdfd; }
+.wsp-canvas-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.wsp-canvas-legenda { flex: 0 0 auto; display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  padding: 9px 16px; border-top: 1px solid #eef2f4; font-size: 11.5px; color: #7b8896; }
+.wsp-canvas-legenda span { display: flex; align-items: center; gap: 6px; }
+.wsp-canvas-legenda i { width: 10px; height: 10px; border-radius: 3px; border: 1.6px solid #7cc3b8; }
+.wsp-canvas-legenda i.vigente { background: #0f8c7e; border-color: #0f8c7e; }
+.wsp-canvas-legenda i.disponivel { border-style: dashed; }
+
+.wsp-aresta { cursor: pointer; }
+.wsp-aresta line:last-child { stroke: #9fb2c2; stroke-width: 1.5; }
+.wsp-aresta:hover line:last-child { stroke: #55707f; }
+.wsp-aresta.ativa line:last-child { stroke: #0f8c7e; stroke-width: 2.1; }
+.wsp-aresta.sel line:last-child { stroke: #c8102e; stroke-width: 2.6; }
+
+.wsp-no { cursor: grab; }
+.wsp-no:active { cursor: grabbing; }
+.wsp-no rect { fill: #fff; stroke: #d8e2e7; stroke-width: 1.3; filter: drop-shadow(0 1px 2px rgba(30,50,70,.07)); }
+.wsp-no:hover rect { stroke: #9fb2c2; }
+.wsp-no.disponivel rect { stroke: #7cc3b8; stroke-dasharray: 4 3; }
+.wsp-no.vigente rect { fill: #eefaf7; stroke: #0f8c7e; stroke-width: 2; stroke-dasharray: none; }
+.wsp-no.sel rect { stroke: #24384d; stroke-width: 2.2; stroke-dasharray: none; }
+.wsp-no.ligando rect { stroke: #c8102e; stroke-width: 2; stroke-dasharray: 5 3; }
+.wsp-no.erro rect { stroke: #d1635c; stroke-width: 2; stroke-dasharray: none; }
+.wsp-no-nome { font: 800 12.5px "Segoe UI", Arial, sans-serif; fill: #24384d; }
+.wsp-no-perfil { font: 700 11.5px "Segoe UI", Arial, sans-serif; fill: #0f716b; }
+.wsp-no-tag { font: 600 10.5px "Segoe UI", Arial, sans-serif; fill: #93a0ac; }
+.wsp-no-dot { fill: #0f8c7e; }
+.wsp-no-erro { fill: #d1635c; }
+
+.wsp-lista-macros { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; }
+.wsp-lista-macros table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wsp-lista-macros th { text-align: left; font-size: 10.5px; letter-spacing: .08em; color: #8a97a4; padding: 6px 8px; border-bottom: 1px solid #eef2f4; }
+.wsp-lista-macros td { padding: 9px 8px; border-bottom: 1px solid #f4f7f8; color: #46596c; vertical-align: top; }
+.wsp-lista-macros tr.sel td { background: #f2faf8; }
+.wsp-badge-vigente { margin-left: 7px; font-size: 10.5px; background: #e7f6f1; color: #0d6b60; border-radius: 999px; padding: 1px 7px; font-weight: 800; }
+
+/* -------------------------------------------------------------- painel inspetor */
+.wsp-inspetor { border-left: 1px solid #e4ebef; }
+.wsp-inspetor-fundo { display: none; }
+.wsp-inspetor-head { flex: 0 0 auto; padding: 14px 16px 0; border-bottom: 1px solid #eef2f4; }
+.wsp-inspetor-tipo { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #0f7c75; }
+.wsp-inspetor-head h2 { margin: 5px 0 0; font-size: 15px; color: #182a3d; letter-spacing: -.02em; }
+.wsp-inspetor-sub { margin: 5px 0 12px; font-size: 12px; color: #7b8896; }
+.wsp-inspetor-nome { margin: 9px 0 12px; width: 100%; border: 1px solid #dfe7eb; border-radius: 8px;
+  padding: 8px 11px; font-size: 13px; font-weight: 700; color: #24384d; }
+.wsp-inspetor-nome:focus { outline: 0; border-color: #0f8c7e; }
+.wsp-abas { display: flex; gap: 2px; }
+.wsp-abas button { border: 0; background: none; padding: 9px 11px; font-size: 12.5px; font-weight: 700;
+  color: #7b8896; border-bottom: 2px solid transparent; }
+.wsp-abas button.ativa { color: #0d6b60; border-bottom-color: #0f8c7e; }
+.wsp-inspetor-corpo { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 20px; }
+.wsp-inspetor-rodape { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 11px 16px; border-top: 1px solid #eef2f4; background: #fbfdfd; }
+.wsp-inspetor-rodape-info { font-size: 11.5px; color: #8a97a4; line-height: 1.4; }
+.wsp-inspetor-alertas { display: grid; gap: 6px; margin-bottom: 14px; }
+.wsp-inspetor-alertas p { display: flex; gap: 7px; align-items: flex-start; margin: 0; font-size: 12px; border-radius: 7px; padding: 8px 10px; }
+.wsp-inspetor-alertas p.erro { background: #fdecec; color: #a32d29; }
+.wsp-inspetor-alertas p.aviso { background: #fdf6e8; color: #8a5a12; }
+
+.wsp-secao-topo { display: grid; gap: 8px; margin-bottom: 12px; }
+.wsp-aplicar-todos { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #8a97a4; }
+.wsp-ajuda { margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5; }
+.wsp-ajuda.menor { font-size: 11.5px; color: #8a97a4; }
+.wsp-dica { position: relative; display: inline-flex; }
+.wsp-dica button { background: none; border: 0; color: #9fb2c2; padding: 0 4px; vertical-align: middle; }
+.wsp-dica button:hover { color: #0f7c75; }
+.wsp-dica-balao { position: absolute; right: 0; top: 22px; z-index: 5; width: 250px; background: #24384d; color: #eaf2f5;
+  font-size: 11.5px; line-height: 1.45; padding: 9px 11px; border-radius: 8px; box-shadow: 0 8px 20px rgba(24,42,61,.22); }
+
+.wsp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.wsp-item { border: 1px solid #e7edf0; border-radius: 9px; overflow: hidden; }
+.wsp-item.aberto { border-color: #cfe0e4; }
+.wsp-item-head { width: 100%; display: flex; align-items: center; gap: 8px; background: #fff; border: 0;
+  padding: 10px 11px; text-align: left; }
+.wsp-item-head:hover { background: #f8fbfb; }
+.wsp-item-head.estatico { cursor: default; justify-content: space-between; }
+.wsp-item-nome { font-size: 12.5px; font-weight: 700; color: #37495c; white-space: nowrap; }
+.wsp-item-resumo { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.wsp-pill { font-size: 10.5px; font-weight: 700; background: #eef2f4; color: #62717f; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.wsp-pill.on { background: #e7f6f1; color: #0d6b60; }
+.wsp-pill.motorista { background: #eaf1fb; color: #37598c; }
+.wsp-item-corpo { padding: 4px 12px 14px; border-top: 1px solid #eef2f4; display: grid; gap: 14px; }
+.wsp-item-corpo.sem-borda { border-top: 0; padding-top: 0; }
+.wsp-campo { display: grid; gap: 7px; }
+.wsp-campo-rotulo { font-size: 11.5px; font-weight: 700; color: #8a97a4; text-transform: uppercase; letter-spacing: .05em; }
+.wsp-campo select, .wsp-inspetor select { border: 1px solid #dfe7eb; border-radius: 7px; padding: 8px 10px; font-size: 12.5px; color: #37495c; background: #fff; width: 100%; }
+.wsp-campo-inline { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: #64748b; }
+.wsp-campo-inline input { width: 72px; border: 1px solid #dfe7eb; border-radius: 7px; padding: 6px 9px; font-size: 12.5px; color: #37495c; }
+.wsp-sub-campos { display: grid; gap: 9px; padding-left: 2px; }
+.wsp-condicoes { margin: 2px 0 0; padding-left: 17px; font-size: 12px; color: #64748b; line-height: 1.6; }
+.wsp-segmentado { display: inline-flex; background: #f2f6f7; border-radius: 8px; padding: 3px; gap: 3px; }
+.wsp-segmentado button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #7b8896; }
+.wsp-segmentado button.ativo { background: #fff; color: #0d6b60; box-shadow: 0 1px 3px rgba(30,50,70,.1); }
+.wsp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wsp-chip { border: 1px solid #dfe7eb; background: #fff; color: #62717f; border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 700; }
+.wsp-chip.on { background: #e7f6f1; border-color: #9dd4c9; color: #0d6b60; }
+.wsp-bloco { margin-top: 16px; border: 1px solid #e7edf0; border-radius: 9px; padding: 12px; display: grid; gap: 7px; }
+.wsp-bloco-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 700; color: #37495c; }
+
+/* ----------------------------------------------------------- desfazer e dialogos */
+.wsp-desfazer { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; gap: 12px; background: #24384d; color: #eaf2f5;
+  border-radius: 10px; padding: 10px 12px 10px 16px; font-size: 12.5px; box-shadow: 0 10px 26px rgba(24,42,61,.28); }
+.wsp-desfazer button { background: none; border: 0; color: #8ed7c9; font-weight: 800; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+.wsp-desfazer button.fechar { color: #9fb2c2; }
+
+.wsp-validacoes { border-radius: 9px; padding: 11px 13px; margin-bottom: 12px; font-size: 12.5px; }
+.wsp-validacoes.erro { background: #fdecec; color: #a32d29; }
+.wsp-validacoes.aviso { background: #fdf6e8; color: #8a5a12; }
+.wsp-validacoes-titulo { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; font-weight: 800; }
+.wsp-validacoes ul { margin: 0; padding-left: 20px; line-height: 1.55; }
+.wsp-revisao-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 6px 0 4px; }
+.wsp-revisao-grid h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: #8a97a4; }
+.wsp-mudancas, .wsp-itens-embarque { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; max-height: 230px; overflow: auto; }
+.wsp-mudancas li { display: grid; gap: 2px; border-left: 2px solid #cfe8e2; padding-left: 9px; font-size: 12.5px; color: #46596c; }
+.wsp-mudancas small { font-size: 11px; color: #96a3af; }
+.wsp-itens-embarque li { font-size: 12.5px; color: #46596c; padding: 6px 9px; background: #f6f9fa; border-radius: 6px; }
+.wsp-enviando { display: grid; justify-items: center; gap: 12px; padding: 26px 0; color: #64748b; font-size: 13px; }
+.girando { animation: wsp-girar 1s linear infinite; color: #0f7c75; }
+@keyframes wsp-girar { to { transform: rotate(360deg); } }
+.wsp-resultado-resumo { display: flex; gap: 16px; margin: 0 0 12px; font-size: 13px; font-weight: 700; }
+.wsp-resultado-resumo .ok { color: #0d6b60; display: inline-flex; align-items: center; gap: 6px; }
+.wsp-resultado-resumo .falha { color: #a32d29; display: inline-flex; align-items: center; gap: 6px; }
+.wsp-resultado-itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; max-height: 280px; overflow: auto; }
+.wsp-resultado-itens li { display: flex; gap: 9px; align-items: flex-start; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; }
+.wsp-resultado-itens li.aceito { background: #f2faf8; color: #2a4a46; }
+.wsp-resultado-itens li.rejeitado { background: #fdecec; color: #a32d29; }
+.wsp-resultado-itens small { display: block; margin-top: 3px; opacity: .85; }
+
+/* ------------------------------------------------------------------ breakpoints */
+@media (max-width: 1439px) {
+  .wsp-corpo { grid-template-columns: 230px minmax(0, 1fr); }
+  .wsp-inspetor { position: absolute; right: 0; top: 0; bottom: 0; width: min(420px, 92vw); z-index: 30;
+    box-shadow: -12px 0 34px rgba(24,42,61,.14); }
+  .wsp-inspetor-fundo { display: block; position: absolute; inset: 0; z-index: 29; background: rgba(24,42,61,.16); border: 0; }
+}
+@media (max-width: 1023px) {
+  .content-workspace { height: auto; overflow: visible; }
+  .wsp-corpo { grid-template-columns: 1fr; }
+  .wsp-nav { max-height: 240px; }
+  .wsp-canvas-stage { min-height: 320px; }
+  .so-desktop { display: none; }
+}

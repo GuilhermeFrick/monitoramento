@@ -3,12 +3,36 @@ import { ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, Plus, X } from
 
 export type IconType = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 
+/**
+ * O dado salvo tem a forma que o codigo espera hoje?
+ *
+ * Existe porque o contrario ja quebrou a tela: a forma de um objeto mudou sem
+ * que a chave de storage mudasse junto, e o navegador de quem ja tinha aberto a
+ * pagina devolveu o formato velho para um codigo que nao o entende mais. Em vez
+ * de depender de alguem lembrar de versionar a chave, o dado salvo e conferido
+ * contra o inicial e descartado quando divergir.
+ */
+function formaCompativel(salvo: unknown, inicial: unknown): boolean {
+  if (Array.isArray(inicial)) {
+    if (!Array.isArray(salvo)) return false;
+    if (!inicial.length || !salvo.length) return true;
+    return formaCompativel(salvo[0], inicial[0]);
+  }
+  if (inicial && typeof inicial === "object") {
+    if (!salvo || typeof salvo !== "object" || Array.isArray(salvo)) return false;
+    return Object.keys(inicial as object).every((chave) => chave in (salvo as object));
+  }
+  return typeof salvo === typeof inicial;
+}
+
 /** Estado persistido em localStorage (camada mock do projeto). */
 export function useStoredState<T>(key: string, initial: T): [T, (next: T | ((current: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
       const saved = window.localStorage.getItem(key);
-      return saved ? (JSON.parse(saved) as T) : initial;
+      if (!saved) return initial;
+      const parsed = JSON.parse(saved) as T;
+      return formaCompativel(parsed, initial) ? parsed : initial;
     } catch {
       return initial;
     }
