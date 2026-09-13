@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { AlertTriangle, BellRing, Camera, ChevronDown, ChevronRight, Radio, Trash2, Volume2, X } from "lucide-react";
+import { AlertTriangle, BellRing, Camera, ChevronDown, ChevronRight, Clock3, Info, Radio, Trash2, Volume2, X } from "lucide-react";
 import { Toggle } from "../../shared";
 import {
-  acoesPadrao, acionamentoLabel, atuadorLabel, canalEnvioLabel, catalogoRegras, estadosSensor, estadosSensorKeys, funcaoJornadaLabel, funcaoLogisticaLabel, funcoesJornada, funcoesLogistica, posturaLabel, sensorLabel,
-  type Atuador, type CanalEnvio, type ConfigAtuador, type ConfiguracaoAcoes, type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type ModoAcionamento, type PerfilOperacional, type PosturaAtuador, type Validacao,
+  acoesPadrao, acionamentoLabel, atuadorLabel, canalEnvioLabel, catalogoRegras, categoriaDaMacro, categoriaMacroLabel, estadosSensor, estadosSensorKeys, posturaLabel, sensorLabel,
+  type Atuador, type CanalEnvio, type CategoriaMacro, type ConfigAtuador, type ConfiguracaoAcoes, type ConfiguracaoVeiculo, type MacroVeiculo, type ModoAcionamento, type PerfilOperacional, type PosturaAtuador, type Validacao,
 } from "../../domain";
 import type { SelecaoGrafo } from "./MacroGraphCanvas";
 
@@ -20,7 +20,7 @@ const acoesDoPerfil = (perfil: PerfilOperacional): ConfiguracaoAcoes => {
   return { ...padrao, ...perfil.acoes, camera: { ...padrao.camera, ...perfil.acoes?.camera } };
 };
 
-export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFechar, onPatchPerfil, onPatchMacro, onRemoverMacro, onRemoverTransicao }: {
+export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFechar, onPatchPerfil, onRemoverMacro, onRemoverTransicao }: {
   config: ConfiguracaoVeiculo;
   selecao: SelecaoGrafo;
   aba: AbaInspetor;
@@ -28,7 +28,6 @@ export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFe
   onAba: (a: AbaInspetor) => void;
   onFechar: () => void;
   onPatchPerfil: (descricao: string, fn: (p: PerfilOperacional) => PerfilOperacional) => void;
-  onPatchMacro: (descricao: string, fn: (m: MacroVeiculo) => MacroVeiculo) => void;
   onRemoverMacro: (macro: MacroVeiculo) => void;
   onRemoverTransicao: (de: string, para: string) => void;
 }) {
@@ -47,6 +46,8 @@ export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFe
   }
 
   const macro = selecao.tipo === "macro" ? config.macros.find((m) => m.id === selecao.id) ?? null : null;
+  const categoria = macro ? categoriaDaMacro(macro) : null;
+  const configuraInteligencia = !macro || categoria === "logistica";
   const perfil = macro ? macro.perfil : config.perfilPadrao;
   const doItem = validacoes.filter((v) => macro ? v.macroId === macro.id : !v.macroId);
   const abas: { id: AbaInspetor; label: string }[] = [
@@ -58,39 +59,34 @@ export function ProfileInspector({ config, selecao, aba, validacoes, onAba, onFe
 
   return <aside className="wsp-inspetor" aria-label="Editor da macro selecionada">
     <header className="wsp-inspetor-head"><div>
-      <p className="wsp-inspetor-tipo">{macro ? `Macro · ${macro.tipo === "inicio" ? "início" : macro.tipo === "fim" ? "fim" : "operação"}` : "Perfil padrão do veículo"}</p>
+      <p className="wsp-inspetor-tipo">{macro ? `Macro · ${categoriaMacroLabel[categoria!]} · ${macro.tipo === "inicio" ? "início" : macro.tipo === "fim" ? "fim" : "operação"}` : "Perfil padrão do veículo"}</p>
       <h2>{macro ? macro.nome : "Nenhuma macro em curso"}</h2>
       <p className="wsp-inspetor-sub">{macro?.descricao ?? "Configuração aplicada quando nenhuma macro está ativa."}</p>
-      <label className="wsp-inspetor-perfil"><span>Perfil ativado</span><input className="wsp-inspetor-nome" value={perfil.nome} aria-label="Nome do perfil" onChange={(e) => onPatchPerfil(`Perfil renomeado para “${e.target.value}”`, (p) => ({ ...p, nome: e.target.value }))} /></label>
-      {macro ? <div className="wsp-funcoes">
-        <label><span>Função de jornada</span>
-          <select value={macro.funcaoJornada ?? ""} onChange={(e) => onPatchMacro(`${macro.nome}: jornada ${e.target.value ? funcaoJornadaLabel[e.target.value as FuncaoJornada].toLowerCase() : "não alterada"}`, (m) => ({ ...m, funcaoJornada: (e.target.value || null) as FuncaoJornada | null }))}>
-            <option value="">Não altera a jornada</option>
-            {funcoesJornada.map((f) => <option key={f} value={f}>{funcaoJornadaLabel[f]}</option>)}
-          </select>
-        </label>
-        <label><span>Função de logística</span>
-          <select value={macro.funcaoLogistica ?? ""} onChange={(e) => onPatchMacro(`${macro.nome}: logística ${e.target.value ? funcaoLogisticaLabel[e.target.value as FuncaoLogistica].toLowerCase() : "não alterada"}`, (m) => ({ ...m, funcaoLogistica: (e.target.value || null) as FuncaoLogistica | null }))}>
-            <option value="">Não altera a viagem</option>
-            {funcoesLogistica.map((f) => <option key={f} value={f}>{funcaoLogisticaLabel[f]}</option>)}
-          </select>
-        </label>
-        <p className="wsp-ajuda menor">O motorista não inicia jornada nem viagem diretamente: ele registra esta macro, e são estas funções que movem cada máquina. O fim de um estado é a macro seguinte.</p>
-      </div> : null}
+      {configuraInteligencia ? <label className="wsp-inspetor-perfil"><span>Perfil ativado</span><input className="wsp-inspetor-nome" value={perfil.nome} aria-label="Nome do perfil" onChange={(e) => onPatchPerfil(`Perfil renomeado para “${e.target.value}”`, (p) => ({ ...p, nome: e.target.value }))} /></label> : null}
     </div><button className="wsp-inspetor-fechar" onClick={onFechar} aria-label="Fechar editor"><X size={15} /></button>
-    <nav className="wsp-abas" role="tablist" aria-label="Configurações da macro">{abas.map(({ id, label }) => <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? "ativa" : ""} onClick={() => onAba(id)}>{label}</button>)}</nav></header>
+    {configuraInteligencia ? <nav className="wsp-abas" role="tablist" aria-label="Configurações da macro">{abas.map(({ id, label }) => <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? "ativa" : ""} onClick={() => onAba(id)}>{label}</button>)}</nav> : null}</header>
 
     <div className="wsp-inspetor-corpo">
       {doItem.length ? <div className="wsp-inspetor-alertas">{doItem.map((v, i) => <p key={i} className={v.nivel === "erro" ? "erro" : "aviso"}><AlertTriangle size={13} /> {v.mensagem}</p>)}</div> : null}
-      {aba === "estado" ? <InitialStateSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
-      {aba === "regras" ? <RulesSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
-      {aba === "acoes" ? <ActionSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
-      {aba === "contingencia" ? <ContingencySettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {!configuraInteligencia && categoria ? <MacroSemInteligencia categoria={categoria} /> : null}
+      {configuraInteligencia && aba === "estado" ? <InitialStateSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {configuraInteligencia && aba === "regras" ? <RulesSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {configuraInteligencia && aba === "acoes" ? <ActionSettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
+      {configuraInteligencia && aba === "contingencia" ? <ContingencySettings perfil={perfil} onPatchPerfil={onPatchPerfil} /> : null}
     </div>
 
-    {macro ? <footer className="wsp-inspetor-rodape"><span className="wsp-inspetor-rodape-info">As alterações entram no próximo embarque deste veículo.</span><button className="wsp-btn perigo" onClick={() => onRemoverMacro(macro)}><Trash2 size={14} /> Remover macro</button></footer>
+    {macro ? <footer className="wsp-inspetor-rodape"><span className="wsp-inspetor-rodape-info">{categoria === "logistica" ? "As regras entram no próximo embarque deste veículo." : categoria === "jornada" ? "Registra a jornada sem alterar a inteligência embarcada." : "Registra a informação sem alterar a inteligência embarcada."}</span><button className="wsp-btn perigo" onClick={() => onRemoverMacro(macro)}><Trash2 size={14} /> Remover macro</button></footer>
       : <footer className="wsp-inspetor-rodape"><span className="wsp-inspetor-rodape-info">Este perfil volta a valer ao encerrar a sequência de macros.</span></footer>}
   </aside>;
+}
+
+function MacroSemInteligencia({ categoria }: { categoria: Exclude<CategoriaMacro, "logistica"> }) {
+  const jornada = categoria === "jornada";
+  const Icone = jornada ? Clock3 : Info;
+  return <div className={`wsp-macro-simples ${categoria}`}>
+    <span className="wsp-macro-simples-icone"><Icone size={19} /></span>
+    <div><strong>{jornada ? "Controle de jornada" : "Registro informativo"}</strong><p>{jornada ? "Esta macro registra a atividade do motorista. Postura, sensores, reações e contingência permanecem inalterados." : "Esta macro registra uma ocorrência operacional. Ela não aciona sensores, regras, alertas ou atuadores."}</p></div>
+  </div>;
 }
 
 function InitialStateSettings({ perfil, onPatchPerfil }: EditorProps) {

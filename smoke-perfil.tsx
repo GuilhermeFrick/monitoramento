@@ -43,13 +43,12 @@ render([{ ...configuracoesIniciais[0], transicoes: [] }], "grafo sem transiçõe
 render([{ ...configuracoesIniciais[0], macros: [], transicoes: [], macroVigente: null }], "sem macros", false);
 
 // O inspetor abre sob demanda, entao nao aparece no render inicial do workspace.
-// Testado isolado, com cada tipo de seleção — inclusive as funções de jornada e
-// logística, que sao da macro e nao do perfil.
-function renderInspetor(selecao: any, rotulo: string, marcadores: string[]) {
+// Testado isolado com cada tipo de seleção.
+function renderInspetor(selecao: any, rotulo: string, marcadores: string[], config: Config = configuracoesIniciais[0]) {
   try {
     const html = renderToString(createElement(ProfileInspector as any, {
-      config: configuracoesIniciais[0], selecao, aba: "estado", validacoes: [],
-      onAba: () => {}, onFechar: () => {}, onPatchPerfil: () => {}, onPatchMacro: () => {},
+      config, selecao, aba: "estado", validacoes: [],
+      onAba: () => {}, onFechar: () => {}, onPatchPerfil: () => {},
       onRemoverMacro: () => {}, onRemoverTransicao: () => {},
     }));
     const faltando = marcadores.filter((m) => !html.includes(m));
@@ -60,8 +59,14 @@ function renderInspetor(selecao: any, rotulo: string, marcadores: string[]) {
   }
 }
 
-const macroComAsDuas = configuracoesIniciais[0].macros.find((m) => m.funcaoJornada && m.funcaoLogistica)!;
-renderInspetor({ tipo: "macro", id: macroComAsDuas.id }, "macro com jornada e logística", ["Função de jornada", "Função de logística", "wsp-inspetor"]);
+const macro = configuracoesIniciais[0].macros[0];
+renderInspetor({ tipo: "macro", id: macro.id }, "macro", ["Perfil ativado", "wsp-inspetor"]);
+const macroJornada = { ...macro, id: "MC-FIM-JORNADA", nome: "Fim de jornada", categoria: "jornada" as const };
+const configJornada = { ...configuracoesIniciais[0], macros: [...configuracoesIniciais[0].macros, macroJornada] };
+renderInspetor({ tipo: "macro", id: macroJornada.id }, "macro de jornada", ["Controle de jornada", "permanecem inalterados"], configJornada);
+const macroInformativa = { ...macro, id: "MC-INFO", nome: "Trânsito lento", categoria: "informativa" as const };
+const configInformativa = { ...configuracoesIniciais[0], macros: [...configuracoesIniciais[0].macros, macroInformativa] };
+renderInspetor({ tipo: "macro", id: macroInformativa.id }, "macro informativa", ["Registro informativo", "não aciona sensores"], configInformativa);
 renderInspetor({ tipo: "padrao" }, "perfil padrão", ["wsp-inspetor"]);
 renderInspetor({ tipo: "transicao", de: configuracoesIniciais[0].transicoes[0].de, para: configuracoesIniciais[0].transicoes[0].para }, "transição", ["Remover transição"]);
 

@@ -48,8 +48,9 @@ export const canalLabel: Record<Equipamento["canal"], string> = { celular: "Celu
 // mesma macro, porque o que esta em jogo e o equipamento daquele veiculo --
 // quais atuadores ele tem ligados, quais sensores existem, que carga leva.
 //
-// Quem ativa um perfil e uma MACRO -- o comportamento que o motorista informa
-// (inicio de viagem, chegada no cliente, refeicao). E as macros nao podem ser
+// Quem ativa um perfil e uma macro LOGISTICA -- o comportamento operacional que
+// o motorista informa (inicio de viagem, chegada no cliente). Macros de jornada
+// e informativas nao alteram a inteligencia embarcada. E as macros nao podem ser
 // registradas em qualquer ordem: formam um GRAFO de transicoes permitidas
 // (`ConfiguracaoVeiculo.transicoes`), que o equipamento usa para recusar uma
 // transicao invalida independentemente do que o app apresentou (`DEV-68`).
@@ -174,11 +175,18 @@ const cfg = (postura: PosturaAtuador, extra: Partial<ConfigAtuador> = {}): Confi
 
 /** `inicio` abre a sequência, `fim` a encerra; `operacao` são os estados do meio. */
 export type TipoMacro = "inicio" | "operacao" | "fim";
+export type CategoriaMacro = "jornada" | "logistica" | "informativa";
+
+export const categoriaMacroLabel: Record<CategoriaMacro, string> = {
+  jornada: "Jornada",
+  logistica: "Logística",
+  informativa: "Informativa",
+};
 
 /**
- * Macro — o comportamento que o motorista informa no app. Cada uma **ativa um
- * perfil operacional** no equipamento (`DEV-64`), e carrega sua posição no grafo
- * para a edição gráfica da sequência.
+ * Macro — o comportamento que o motorista informa no app. Macros logísticas
+ * podem ativar um perfil operacional; as de jornada e informativas apenas
+ * registram estado/ocorrência. Todas carregam sua posição no grafo.
  */
 /**
  * As duas funções que uma macro pode carregar.
@@ -223,6 +231,8 @@ export type MacroVeiculo = {
   nome: string;
   descricao: string;
   tipo: TipoMacro;
+  /** Define as capacidades da macro. Opcional para manter compatibilidade com rascunhos antigos. */
+  categoria?: CategoriaMacro;
   /** Avança a máquina de jornada (controle de ponto). `null` = não mexe nela. */
   funcaoJornada: FuncaoJornada | null;
   /** Avança a máquina de logística (viagem/operação). `null` = não mexe nela. */
@@ -231,6 +241,21 @@ export type MacroVeiculo = {
   x: number;
   y: number;
 };
+
+/** Classifica rascunhos antigos sem apagar o que o usuário já configurou no navegador. */
+export function categoriaDaMacro(macro: MacroVeiculo): CategoriaMacro {
+  const nome = macro.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // Macros do catálogo podem ter sido salvas antes da categoria existir. O nome
+  // prevalece até sobre a categoria antiga para aplicar a classificação revisada.
+  if (["inicio de jornada", "fim de jornada", "descanso semanal"].includes(nome)) return "jornada";
+  if (["inicio de viagem", "reinicio de viagem", "fim de viagem", "chegada no cliente", "saida do cliente", "cancelar operacao", "parada para refeicao", "pausa para refeicao", "parada para abastecimento", "abastecimento", "parada eventual", "parada para pernoite", "pernoite", "fiscalizacao", "parada para manutencao", "manutencao", "emergencia"].includes(nome)) return "logistica";
+  if (macro.categoria) return macro.categoria;
+  if (["transito", "congestion", "lentidao", "interdicao", "acidente na via"].some((termo) => nome.includes(termo))) return "informativa";
+  if (["abastecimento", "pernoite", "cliente", "fiscalizacao", "manutencao", "emergencia", "parada eventual"].some((termo) => nome.includes(termo))) return "logistica";
+  if (macro.funcaoLogistica) return "logistica";
+  if (macro.funcaoJornada) return "jornada";
+  return "logistica";
+}
 
 /** Uma aresta do grafo: estando em `de`, o motorista pode registrar `para`. */
 export type Transicao = { de: string; para: string };
@@ -312,40 +337,17 @@ export function validarConfiguracao(c: ConfiguracaoVeiculo): Validacao[] {
     if (m.tipo !== "fim" && !c.transicoes.some((t) => t.de === m.id)) {
       achados.push({ nivel: "erro", codigo: "sem-saida", macroId: m.id, mensagem: `“${m.nome}” não é fim de sequência e não tem nenhuma saída: o motorista ficaria preso nela.` });
     }
-    if (!m.perfil.sensores.some((s) => s.armado)) {
-      achados.push({ nivel: "aviso", codigo: "sem-sensor", macroId: m.id, mensagem: `O perfil de “${m.nome}” não tem nenhum sensor armado — nada será detectado enquanto ela estiver em curso.` });
-    }
-    for (const [chave, a] of Object.entries(m.perfil.atuadores) as [Atuador, ConfigAtuador][]) {
-      if (a.liberavelPeloMotorista && a.limiteAcionamentos === null && !a.exigeAutenticacao) {
-        achados.push({ nivel: "aviso", codigo: "sem-limite", macroId: m.id, mensagem: `Em “${m.nome}”, ${atuadorLabel[chave].toLowerCase()} é liberável pelo motorista sem limite nem credencial.` });
+    if (categoriaDaMacro(m) === "logistica") {
+      if (!m.perfil.sensores.some((s) => s.armado)) {
+        achados.push({ nivel: "aviso", codigo: "sem-sensor", macroId: m.id, mensagem: `O perfil de “${m.nome}” não tem nenhum sensor armado — nada será detectado enquanto ela estiver em curso.` });
+      }
+      for (const [chave, a] of Object.entries(m.perfil.atuadores) as [Atuador, ConfigAtuador][]) {
+        if (a.liberavelPeloMotorista && a.limiteAcionamentos === null && !a.exigeAutenticacao) {
+          achados.push({ nivel: "aviso", codigo: "sem-limite", macroId: m.id, mensagem: `Em “${m.nome}”, ${atuadorLabel[chave].toLowerCase()} é liberável pelo motorista sem limite nem credencial.` });
+        }
       }
     }
   }
-  // Coerência das duas máquinas que as macros movem — o grafo sozinho não pega
-  // isto, porque uma transição pode ser legítima e ainda assim deixar a viagem
-  // ou a jornada num estado impossível.
-  if (!c.macros.some((m) => m.funcaoJornada === "inicio_jornada")) {
-    achados.push({ nivel: "aviso", codigo: "sem-abertura-jornada", mensagem: "Nenhuma macro abre a jornada (“Início de jornada”) — o controle de ponto não teria marco inicial." });
-  }
-  for (const m of c.macros) {
-    if (m.funcaoLogistica && ["concluir_operacao", "cancelar_operacao"].includes(m.funcaoLogistica)) {
-      const alcancaAbertura = c.transicoes.some((t) => t.para === m.id && c.macros.find((x) => x.id === t.de)?.funcaoLogistica === "iniciar_operacao");
-      if (!alcancaAbertura) {
-        achados.push({ nivel: "aviso", codigo: "operacao-sem-abertura", macroId: m.id, mensagem: `“${m.nome}” ${m.funcaoLogistica === "concluir_operacao" ? "conclui" : "cancela"} uma operação, mas nenhuma macro que a antecede no grafo abre operação.` });
-      }
-    }
-    if (m.funcaoLogistica === "finalizar_viagem") {
-      const alcancaInicio = c.transicoes.some((t) => t.para === m.id && c.macros.find((x) => x.id === t.de)?.funcaoLogistica === "iniciar_viagem");
-      const temInicio = c.macros.some((x) => x.funcaoLogistica === "iniciar_viagem");
-      if (temInicio && !alcancaInicio && !c.transicoes.some((t) => t.para === m.id)) {
-        achados.push({ nivel: "aviso", codigo: "fim-viagem-inalcancavel", macroId: m.id, mensagem: `“${m.nome}” finaliza a viagem mas não é alcançável a partir de nenhuma macro.` });
-      }
-    }
-    if (!m.funcaoJornada && !m.funcaoLogistica && m.tipo !== "operacao") {
-      achados.push({ nivel: "aviso", codigo: "macro-sem-funcao", macroId: m.id, mensagem: `“${m.nome}” está marcada como ${m.tipo === "inicio" ? "início" : "fim"} de sequência mas não move jornada nem logística.` });
-    }
-  }
-
   if (!c.perfilPadrao.sensores.some((s) => s.armado)) {
     achados.push({ nivel: "aviso", codigo: "padrao-sem-sensor", mensagem: "O perfil padrão não tem sensor armado — entre um embarque e outro o veículo fica sem detecção." });
   }
@@ -356,7 +358,10 @@ export function validarConfiguracao(c: ConfiguracaoVeiculo): Validacao[] {
 export function itensDoEmbarque(c: ConfiguracaoVeiculo): { id: string; nome: string }[] {
   return [
     { id: "PADRAO", nome: `Perfil padrão · ${c.perfilPadrao.nome}` },
-    ...c.macros.map((m) => ({ id: m.id, nome: `${m.nome} · perfil ${m.perfil.nome}` })),
+    ...c.macros.map((m) => {
+      const categoria = categoriaDaMacro(m);
+      return { id: m.id, nome: categoria === "logistica" ? `${m.nome} · perfil ${m.perfil.nome}` : categoria === "jornada" ? `${m.nome} · controle de jornada` : `${m.nome} · registro informativo` };
+    }),
     { id: "GRAFO", nome: `Sequência de macros · ${c.transicoes.length} transições` },
   ];
 }
@@ -382,6 +387,7 @@ const perfilPadraoBase = (): PerfilOperacional => ({
 function macrosBase(): MacroVeiculo[] {
   return [
     {
+      // A categoria é inferida aqui para que rascunhos v5 já salvos continuem compatíveis.
       id: "MC-INICIO", nome: "Início de viagem", tipo: "inicio", x: 60, y: 40,
       funcaoLogistica: "iniciar_viagem", funcaoJornada: "inicio_direcao",
       descricao: "Motorista assume o veículo e inicia a viagem.",
@@ -406,7 +412,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-CLIENTE-IN", nome: "Chegada no cliente", tipo: "operacao", x: 300, y: 40,
+      id: "MC-CLIENTE-IN", nome: "Chegada no cliente", tipo: "operacao", categoria: "logistica", x: 300, y: 40,
       funcaoLogistica: "iniciar_operacao", funcaoJornada: "inicio_espera",
       descricao: "Veículo entrou no cliente e começa a descarga.",
       perfil: {
@@ -430,7 +436,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-CLIENTE-OUT", nome: "Saída do cliente", tipo: "operacao", x: 540, y: 40,
+      id: "MC-CLIENTE-OUT", nome: "Saída do cliente", tipo: "operacao", categoria: "logistica", x: 540, y: 40,
       funcaoLogistica: "concluir_operacao", funcaoJornada: "inicio_direcao",
       descricao: "Entrega concluída; veículo retoma a viagem.",
       perfil: {
@@ -453,7 +459,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-ABASTECIMENTO", nome: "Parada para abastecimento", tipo: "operacao", x: 180, y: 200,
+      id: "MC-ABASTECIMENTO", nome: "Parada para abastecimento", tipo: "operacao", categoria: "logistica", x: 180, y: 200,
       funcaoLogistica: null, funcaoJornada: "inicio_descanso",
       descricao: "Parada em posto homologado para abastecer.",
       perfil: {
@@ -475,7 +481,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-REFEICAO", nome: "Pausa para refeição", tipo: "operacao", x: 420, y: 200,
+      id: "MC-REFEICAO", nome: "Pausa para refeição", tipo: "operacao", categoria: "logistica", x: 420, y: 200,
       funcaoLogistica: null, funcaoJornada: "inicio_refeicao",
       descricao: "Pausa de refeição prevista na jornada.",
       perfil: {
@@ -498,7 +504,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-PERNOITE", nome: "Pernoite", tipo: "operacao", x: 660, y: 200,
+      id: "MC-PERNOITE", nome: "Pernoite", tipo: "operacao", categoria: "logistica", x: 660, y: 200,
       funcaoLogistica: null, funcaoJornada: "inicio_interjornada",
       descricao: "Veículo estacionado para pernoite autorizado.",
       perfil: {
@@ -522,7 +528,7 @@ function macrosBase(): MacroVeiculo[] {
       },
     },
     {
-      id: "MC-FIM", nome: "Fim de viagem", tipo: "fim", x: 780, y: 40,
+      id: "MC-FIM", nome: "Fim de viagem", tipo: "fim", categoria: "logistica", x: 780, y: 40,
       funcaoLogistica: "finalizar_viagem", funcaoJornada: "inicio_interjornada",
       descricao: "Viagem encerrada; veículo entregue no pátio.",
       perfil: {
@@ -564,8 +570,8 @@ function transicoesBase(): Transicao[] {
  * mesmas macros), mas o **perfil** por trás de cada uma é de cada veículo.
  * É por este id que um ponto de controle referencia a macro que ele dispara.
  */
-export const catalogoMacros: { id: string; nome: string; descricao: string; tipo: TipoMacro }[] =
-  macrosBase().map(({ id, nome, descricao, tipo }) => ({ id, nome, descricao, tipo }));
+export const catalogoMacros: { id: string; nome: string; descricao: string; tipo: TipoMacro; categoria: CategoriaMacro }[] =
+  macrosBase().map((macro) => ({ id: macro.id, nome: macro.nome, descricao: macro.descricao, tipo: macro.tipo, categoria: categoriaDaMacro(macro) }));
 
 export const nomeMacro = (id: string) => catalogoMacros.find((m) => m.id === id)?.nome ?? id;
 
@@ -608,10 +614,13 @@ export function macrosInalcancaveis(config: ConfiguracaoVeiculo): MacroVeiculo[]
   return config.macros.filter((m) => !alcancados.has(m.id));
 }
 
-/** O perfil em vigor num veículo agora — a macro vigente, ou o padrão se não há nenhuma. */
+/** O perfil de inteligência em vigor; jornada e informação não o substituem. */
 export function perfilVigente(config: ConfiguracaoVeiculo): { perfil: PerfilOperacional; macro: MacroVeiculo | null } {
   const macro = config.macros.find((m) => m.id === config.macroVigente) ?? null;
-  return { perfil: macro ? macro.perfil : config.perfilPadrao, macro };
+  if (!macro || categoriaDaMacro(macro) === "logistica") return { perfil: macro ? macro.perfil : config.perfilPadrao, macro };
+  const nomeAtivo = equipamentos.find((e) => e.veiculo === config.veiculo)?.perfilAtivo;
+  const perfilMantido = config.macros.find((m) => categoriaDaMacro(m) === "logistica" && m.perfil.nome === nomeAtivo)?.perfil ?? config.perfilPadrao;
+  return { perfil: perfilMantido, macro };
 }
 
 // -------------------------------------------------------- Pontos de Controle

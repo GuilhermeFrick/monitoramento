@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, LayoutGrid, Link2, List, Maximize2, Network, Plus, Truck, ZoomIn, ZoomOut } from "lucide-react";
-import { funcaoJornadaLabel, funcaoLogisticaLabel, perfilVigente, proximasMacros, statusConfig, statusSyncLabel, type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type Transicao, type Validacao } from "../../domain";
+import { AlertTriangle, ChevronDown, Columns3, Grid2X2, LayoutGrid, Link2, List, Maximize2, Network, Orbit, Plus, Rows3, Trash2, Truck, ZoomIn, ZoomOut } from "lucide-react";
+import { categoriaDaMacro, categoriaMacroLabel, perfilVigente, proximasMacros, statusConfig, statusSyncLabel, type CategoriaMacro, type ConfiguracaoVeiculo, type FuncaoJornada, type FuncaoLogistica, type MacroVeiculo, type Transicao, type Validacao } from "../../domain";
 
 export const NO_W = 168;
 export const NO_H = 62;
@@ -10,7 +10,8 @@ const LARGURA_MINIMA_VISTA = 760;
 const LARGURA_MAXIMA_NO_NA_TELA = 145;
 
 export type SelecaoGrafo = { tipo: "macro"; id: string } | { tipo: "transicao"; de: string; para: string } | { tipo: "padrao" };
-export type MacroCatalogo = { id: string; nome: string; descricao: string; tipo: MacroVeiculo["tipo"]; funcaoJornada: FuncaoJornada | null; funcaoLogistica: FuncaoLogistica | null };
+export type MacroCatalogo = { id: string; nome: string; descricao: string; tipo: MacroVeiculo["tipo"]; categoria: CategoriaMacro; funcaoJornada: FuncaoJornada | null; funcaoLogistica: FuncaoLogistica | null };
+export type TipoLayoutMacro = "camadas" | "coluna" | "linha" | "matriz" | "anel";
 
 /**
  * Catálogo de macros — o vocabulário que a operação fala.
@@ -19,21 +20,23 @@ export type MacroCatalogo = { id: string; nome: string; descricao: string; tipo:
  * macro pode avançar a jornada, a logística, ou as duas ao mesmo tempo.
  */
 export const MACROS_CATALOGO: MacroCatalogo[] = [
-  { id: "CAT-JORNADA-INICIO", nome: "Início de jornada", descricao: "Motorista assume o veículo e abre a jornada.", tipo: "inicio", funcaoJornada: "inicio_jornada", funcaoLogistica: null },
-  { id: "CAT-VIAGEM-INICIO", nome: "Início de viagem", descricao: "Abre a viagem e começa a contar direção.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: "iniciar_viagem" },
-  { id: "CAT-VIAGEM-REINICIO", nome: "Reinício de viagem", descricao: "Volta a contar direção depois de uma parada — não reabre a viagem.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: null },
-  { id: "CAT-VIAGEM-FIM", nome: "Fim de viagem", descricao: "Encerra a viagem e entra em interjornada.", tipo: "fim", funcaoJornada: "inicio_interjornada", funcaoLogistica: "finalizar_viagem" },
-  { id: "CAT-CLIENTE-IN", nome: "Chegada no cliente", descricao: "Abre a operação no cliente; o tempo passa a contar como espera.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: "iniciar_operacao" },
-  { id: "CAT-CLIENTE-OUT", nome: "Saída do cliente", descricao: "Conclui a operação e retoma a direção.", tipo: "operacao", funcaoJornada: "inicio_direcao", funcaoLogistica: "concluir_operacao" },
-  { id: "CAT-OPERACAO-CANCELA", nome: "Cancelar operação", descricao: "Cancela a operação em curso no cliente.", tipo: "operacao", funcaoJornada: null, funcaoLogistica: "cancelar_operacao" },
-  { id: "CAT-REFEICAO", nome: "Parada para refeição", descricao: "Parada programada para refeição do motorista.", tipo: "operacao", funcaoJornada: "inicio_refeicao", funcaoLogistica: null },
-  { id: "CAT-ABASTECIMENTO", nome: "Parada para abastecimento", descricao: "Parada em posto para abastecer.", tipo: "operacao", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
-  { id: "CAT-PARADA-EVENTUAL", nome: "Parada eventual", descricao: "Parada não programada durante a viagem.", tipo: "operacao", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
-  { id: "CAT-PERNOITE", nome: "Parada para pernoite", descricao: "Veículo estacionado para pernoite autorizado.", tipo: "operacao", funcaoJornada: "inicio_interjornada", funcaoLogistica: null },
-  { id: "CAT-DESCANSO-SEMANAL", nome: "Descanso semanal", descricao: "Início do descanso semanal remunerado.", tipo: "fim", funcaoJornada: "inicio_descanso_semanal", funcaoLogistica: null },
-  { id: "CAT-FISCALIZACAO", nome: "Fiscalização", descricao: "Parada em posto fiscal, balança ou inspeção.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: null },
-  { id: "CAT-MANUTENCAO", nome: "Parada para manutenção", descricao: "Veículo parado para manutenção preventiva ou corretiva.", tipo: "operacao", funcaoJornada: "inicio_espera", funcaoLogistica: null },
-  { id: "CAT-EMERGENCIA", nome: "Emergência", descricao: "Ativa o perfil de resposta imediata a uma emergência.", tipo: "operacao", funcaoJornada: null, funcaoLogistica: null },
+  { id: "CAT-JORNADA-INICIO", nome: "Início de jornada", descricao: "Motorista assume o veículo e abre a jornada.", tipo: "inicio", categoria: "jornada", funcaoJornada: "inicio_jornada", funcaoLogistica: null },
+  { id: "CAT-VIAGEM-INICIO", nome: "Início de viagem", descricao: "Abre a viagem e começa a contar direção.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_direcao", funcaoLogistica: "iniciar_viagem" },
+  { id: "CAT-VIAGEM-REINICIO", nome: "Reinício de viagem", descricao: "Retoma a viagem depois de uma parada.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_direcao", funcaoLogistica: null },
+  { id: "CAT-VIAGEM-FIM", nome: "Fim de viagem", descricao: "Encerra a viagem e entra em interjornada.", tipo: "fim", categoria: "logistica", funcaoJornada: "inicio_interjornada", funcaoLogistica: "finalizar_viagem" },
+  { id: "CAT-JORNADA-FIM", nome: "Fim de jornada", descricao: "Encerra a jornada de trabalho do motorista.", tipo: "fim", categoria: "jornada", funcaoJornada: "inicio_interjornada", funcaoLogistica: null },
+  { id: "CAT-CLIENTE-IN", nome: "Chegada no cliente", descricao: "Abre a operação no cliente; o tempo passa a contar como espera.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_espera", funcaoLogistica: "iniciar_operacao" },
+  { id: "CAT-CLIENTE-OUT", nome: "Saída do cliente", descricao: "Conclui a operação e retoma a direção.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_direcao", funcaoLogistica: "concluir_operacao" },
+  { id: "CAT-OPERACAO-CANCELA", nome: "Cancelar operação", descricao: "Cancela a operação em curso no cliente.", tipo: "operacao", categoria: "logistica", funcaoJornada: null, funcaoLogistica: "cancelar_operacao" },
+  { id: "CAT-REFEICAO", nome: "Parada para refeição", descricao: "Parada programada para refeição do motorista.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_refeicao", funcaoLogistica: null },
+  { id: "CAT-ABASTECIMENTO", nome: "Parada para abastecimento", descricao: "Parada em posto para abastecer.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
+  { id: "CAT-PARADA-EVENTUAL", nome: "Parada eventual", descricao: "Parada não programada durante a viagem.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_descanso", funcaoLogistica: null },
+  { id: "CAT-PERNOITE", nome: "Parada para pernoite", descricao: "Veículo estacionado para pernoite autorizado.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_interjornada", funcaoLogistica: null },
+  { id: "CAT-DESCANSO-SEMANAL", nome: "Descanso semanal", descricao: "Início do descanso semanal remunerado.", tipo: "fim", categoria: "jornada", funcaoJornada: "inicio_descanso_semanal", funcaoLogistica: null },
+  { id: "CAT-FISCALIZACAO", nome: "Fiscalização", descricao: "Parada em posto fiscal, balança ou inspeção.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_espera", funcaoLogistica: null },
+  { id: "CAT-MANUTENCAO", nome: "Parada para manutenção", descricao: "Veículo parado para manutenção preventiva ou corretiva.", tipo: "operacao", categoria: "logistica", funcaoJornada: "inicio_espera", funcaoLogistica: null },
+  { id: "CAT-EMERGENCIA", nome: "Emergência", descricao: "Ativa o perfil de resposta imediata a uma emergência.", tipo: "operacao", categoria: "logistica", funcaoJornada: null, funcaoLogistica: null },
+  { id: "CAT-TRANSITO-LENTO", nome: "Trânsito lento", descricao: "Registra lentidão no trajeto sem alterar a inteligência embarcada.", tipo: "operacao", categoria: "informativa", funcaoJornada: null, funcaoLogistica: null },
 ];
 
 type Caixa = { x: number; y: number; w: number; h: number };
@@ -68,6 +71,39 @@ export function autoLayout(config: ConfiguracaoVeiculo): MacroVeiculo[] {
   });
 }
 
+/** Organizações geométricas alternativas para adequar o grafo ao tipo de operação. */
+export function organizarMacros(config: ConfiguracaoVeiculo, tipo: TipoLayoutMacro): MacroVeiculo[] {
+  if (tipo === "camadas") return autoLayout(config);
+
+  const macros = config.macros;
+  if (!macros.length) return macros;
+
+  if (tipo === "coluna") {
+    return macros.map((m, indice) => ({ ...m, x: 80, y: 40 + indice * ESPACO_Y }));
+  }
+  if (tipo === "linha") {
+    return macros.map((m, indice) => ({ ...m, x: 40 + indice * ESPACO_X, y: 80 }));
+  }
+  if (tipo === "matriz") {
+    const colunas = Math.ceil(Math.sqrt(macros.length));
+    return macros.map((m, indice) => ({
+      ...m,
+      x: 40 + (indice % colunas) * ESPACO_X,
+      y: 40 + Math.floor(indice / colunas) * ESPACO_Y,
+    }));
+  }
+
+  if (macros.length === 1) return [{ ...macros[0], x: 300, y: 180 }];
+  const raioX = Math.max(220, (macros.length * NO_W * 1.18) / (2 * Math.PI));
+  const raioY = Math.max(145, raioX * .62);
+  const centroX = raioX + NO_W / 2 + 48;
+  const centroY = raioY + NO_H / 2 + 48;
+  return macros.map((m, indice) => {
+    const angulo = -Math.PI / 2 + (indice * Math.PI * 2) / macros.length;
+    return { ...m, x: centroX + Math.cos(angulo) * raioX - NO_W / 2, y: centroY + Math.sin(angulo) * raioY - NO_H / 2 };
+  });
+}
+
 function limites(macros: MacroVeiculo[]): Caixa {
   if (!macros.length) return { x: 0, y: 0, w: 800, h: 400 };
   const x1 = Math.min(...macros.map((m) => m.x));
@@ -90,19 +126,7 @@ function naBorda(origem: { x: number; y: number }, alvo: { x: number; y: number 
 
 const corta = (texto: string, max: number) => texto.length > max ? `${texto.slice(0, max - 1)}…` : texto;
 
-/**
- * O que a macro move — é o equivalente à coluna "Tipo" do controle de ponto do
- * sistema de referência, que mostra a função de jornada ao lado da macro que a
- * originou.
- */
-function rotuloFuncoes(m: MacroVeiculo): string {
-  const partes: string[] = [];
-  if (m.funcaoJornada) partes.push(funcaoJornadaLabel[m.funcaoJornada].replace("Início de ", "▸ "));
-  if (m.funcaoLogistica) partes.push(funcaoLogisticaLabel[m.funcaoLogistica]);
-  return partes.length ? partes.join(" · ") : "só troca de perfil";
-}
-
-export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, onSelecionar, onAbrirEditor, onMoverMacro, onCriarTransicao, onAdicionarMacro, onNovaMacro, onAutoLayout, onToast }: {
+export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, onSelecionar, onAbrirEditor, onMoverMacro, onCriarTransicao, onAdicionarMacro, onNovaMacro, onOrganizar, onRemoverMacro, onToast }: {
   config: ConfiguracaoVeiculo;
   selecao: SelecaoGrafo;
   validacoes: Validacao[];
@@ -113,7 +137,8 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
   onCriarTransicao: (de: string, para: string) => void;
   onAdicionarMacro: (macro: MacroCatalogo) => void;
   onNovaMacro: () => void;
-  onAutoLayout: () => void;
+  onOrganizar: (tipo: TipoLayoutMacro) => void;
+  onRemoverMacro: (macro: MacroVeiculo) => void;
   onToast: (m: string) => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -126,9 +151,11 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
   const [panorama, setPanorama] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const [modo, setModo] = useState<"grafo" | "lista">("grafo");
   const [catalogoAberto, setCatalogoAberto] = useState(false);
+  const [layoutAberto, setLayoutAberto] = useState(false);
   const ignorarClique = useRef(false);
   const ultimoCliqueNo = useRef<{ id: string; em: number } | null>(null);
   const catalogoRef = useRef<HTMLDivElement>(null);
+  const ajusteLayoutPendente = useRef(false);
 
   const erros = validacoes.filter((v) => v.nivel === "erro");
   const permitidasAgora = useMemo(() => proximasMacros(config, config.macroVigente).map((m) => m.id), [config]);
@@ -162,6 +189,11 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
   // ajusta ao abrir e ao trocar de veículo
   useEffect(() => { ajustar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [config.veiculo, config.macros.length]);
   useEffect(() => {
+    if (!ajusteLayoutPendente.current) return;
+    ajusteLayoutPendente.current = false;
+    ajustar();
+  }, [ajustar, config.macros]);
+  useEffect(() => {
     if (!catalogoAberto) return;
     const fechar = (e: PointerEvent) => { if (!catalogoRef.current?.contains(e.target as Node)) setCatalogoAberto(false); };
     document.addEventListener("pointerdown", fechar);
@@ -173,6 +205,12 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
     const h = w * (v.h / v.w);
     return { x: v.x + (v.w - w) / 2, y: v.y + (v.h - h) / 2, w, h };
   });
+
+  const organizar = (tipo: TipoLayoutMacro) => {
+    ajusteLayoutPendente.current = true;
+    setLayoutAberto(false);
+    onOrganizar(tipo);
+  };
 
   const clicarNo = (id: string) => {
     if (!modoLigar) { onSelecionar({ tipo: "macro", id }); return; }
@@ -271,7 +309,17 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
           <button className="wsp-icone" onClick={() => zoom(0.8)} aria-label="Aproximar"><ZoomIn size={15} /></button>
           <button className="wsp-icone" onClick={ajustar} aria-label="Ajustar à tela" title="Ajustar à tela"><Maximize2 size={15} /></button>
         </div>
-        <button className={`wsp-btn ${modo === "lista" ? "oculto" : ""}`} aria-label="Organizar grafo" title="Organizar grafo" onClick={onAutoLayout}><LayoutGrid size={14} /><span>Organizar</span></button>
+        <div className={`wsp-layout ${modo === "lista" ? "oculto" : ""}`} onMouseEnter={() => setLayoutAberto(true)} onMouseLeave={() => setLayoutAberto(false)}>
+          <button className={`wsp-btn ${layoutAberto ? "ativo" : ""}`} aria-label="Escolher organização do grafo" title="Organizar grafo" aria-haspopup="menu" aria-expanded={layoutAberto} onClick={() => setLayoutAberto(true)}><LayoutGrid size={14} /><span>Organizar</span><ChevronDown className="wsp-add-seta" size={12} /></button>
+          {layoutAberto ? <div className="wsp-layout-menu" role="menu" aria-label="Organizar macros">
+            <div className="wsp-layout-head"><strong>Organizar macros</strong><small>Escolha a distribuição visual</small></div>
+            <button role="menuitem" onClick={() => organizar("camadas")}><LayoutGrid size={16} /><span><strong>Por fluxo</strong><small>Segue as ligações entre as macros</small></span></button>
+            <button role="menuitem" onClick={() => organizar("coluna")}><Rows3 size={16} /><span><strong>Em coluna</strong><small>Uma macro embaixo da outra</small></span></button>
+            <button role="menuitem" onClick={() => organizar("linha")}><Columns3 size={16} /><span><strong>Em linha</strong><small>Todas as macros lado a lado</small></span></button>
+            <button role="menuitem" onClick={() => organizar("matriz")}><Grid2X2 size={16} /><span><strong>Matriz {Math.ceil(Math.sqrt(config.macros.length))} × {Math.ceil(Math.sqrt(config.macros.length))}</strong><small>Ocupa melhor largura e altura</small></span></button>
+            <button role="menuitem" onClick={() => organizar("anel")}><Orbit size={16} /><span><strong>Em anel</strong><small>Distribui as macros ao redor do fluxo</small></span></button>
+          </div> : null}
+        </div>
         <button className={`wsp-btn ${modoLigar ? "ativo" : ""} ${modo === "lista" ? "oculto" : ""}`} aria-label={modoLigar ? (ligando ? "Selecionar destino da ligação" : "Selecionar origem da ligação") : "Ligar macros"} title="Ligar macros" aria-pressed={modoLigar} onClick={() => { setModoLigar(!modoLigar); setLigando(null); }}><Link2 size={14} /><span>{modoLigar ? (ligando ? "Clique o destino" : "Clique a origem") : "Ligar"}</span></button>
         <div className="wsp-add-macro" ref={catalogoRef}>
           <button className={`wsp-btn ${catalogoAberto ? "ativo" : ""}`} aria-label="Adicionar macro" title="Adicionar macro" aria-haspopup="menu" aria-expanded={catalogoAberto} onClick={() => setCatalogoAberto((aberto) => !aberto)}><Plus size={14} /><span>Macro</span><ChevronDown className="wsp-add-seta" size={12} /></button>
@@ -280,7 +328,7 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
             <div className="wsp-catalogo-lista">{MACROS_CATALOGO.map((item) => {
               const adicionada = config.macros.some((m) => m.nome.trim().toLocaleLowerCase("pt-BR") === item.nome.toLocaleLowerCase("pt-BR"));
               return <button key={item.id} role="menuitem" disabled={adicionada} onClick={() => { onAdicionarMacro(item); setCatalogoAberto(false); }}>
-                <span><strong>{item.nome}</strong><small>{item.descricao}</small></span>
+                <span><strong>{item.nome}</strong><small>{categoriaMacroLabel[item.categoria]} · {item.descricao}</small></span>
                 {adicionada ? <i>No grafo</i> : <Plus size={14} />}
               </button>;
             })}</div>
@@ -296,7 +344,7 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
     </button> : null}
 
     {modo === "lista"
-      ? <ListaMacros config={config} selecao={selecao} onSelecionar={onSelecionar} onAbrirEditor={onAbrirEditor} />
+      ? <ListaMacros config={config} selecao={selecao} onSelecionar={onSelecionar} onAbrirEditor={onAbrirEditor} onRemoverMacro={onRemoverMacro} />
       : <div className="wsp-canvas-stage" ref={stageRef}>
           <svg
             ref={svgRef} className="wsp-canvas-svg" viewBox={`${vista.x} ${vista.y} ${vista.w} ${vista.h}`} preserveAspectRatio="xMidYMid meet"
@@ -338,13 +386,14 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
 
             {config.macros.map((m) => {
               const posicao = posicaoMacro(m);
+              const categoria = categoriaDaMacro(m);
               const sel = selecao.tipo === "macro" && selecao.id === m.id;
               const vigente = config.macroVigente === m.id;
               const disponivel = permitidasAgora.includes(m.id);
               const comErro = erros.some((e) => e.macroId === m.id);
               return <g
                 key={m.id} transform={`translate(${posicao.x},${posicao.y})`} tabIndex={0} role="button"
-                aria-label={`${m.nome}, perfil ${m.perfil.nome}${vigente ? ", em curso neste veículo" : ""}. Clique para selecionar; clique duas vezes para editar.`} aria-pressed={sel}
+                aria-label={`${m.nome}, macro ${categoriaMacroLabel[categoria].toLowerCase()}${categoria === "logistica" ? `, perfil ${m.perfil.nome}` : ""}${vigente ? ", em curso neste veículo" : ""}. Clique para selecionar; clique duas vezes para editar.`} aria-pressed={sel}
                 className={`wsp-no ${sel ? "sel" : ""} ${vigente ? "vigente" : ""} ${ligando === m.id ? "ligando" : ""} ${ligacao?.sobre === m.id ? "alvo" : ""} ${arrastando?.id === m.id ? "arrastando" : ""} ${disponivel ? "disponivel" : ""} ${comErro ? "erro" : ""}`}
                 onPointerDown={(e) => { if (modoLigar || ligacao) return; e.preventDefault(); e.stopPropagation(); svgRef.current?.setPointerCapture(e.pointerId); const p = emGrafo(e.clientX, e.clientY); setArrastando({ id: m.id, pointerId: e.pointerId, dx: p.x - m.x, dy: p.y - m.y, origemX: m.x, origemY: m.y, x: m.x, y: m.y, moveu: false }); }}
                 onClick={() => { if (modoLigar && !ignorarClique.current) clicarNo(m.id); }}
@@ -353,9 +402,18 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
                 <title>{`${m.nome}: arraste para mover; duplo clique para editar; arraste um ponto azul para ligar.`}</title>
                 <rect width={NO_W} height={NO_H} rx={10} />
                 <text className="wsp-no-nome" x={12} y={22}>{corta(m.nome, 21)}</text>
-                <text className="wsp-no-perfil" x={12} y={39}>perfil: {corta(m.perfil.nome, 19)}</text>
-                <text className="wsp-no-tag" x={12} y={53}>{corta(rotuloFuncoes(m), 30)}</text>
-                {comErro ? <circle className="wsp-no-erro" cx={NO_W - 15} cy={15} r={5} /> : vigente ? <circle className="wsp-no-dot" cx={NO_W - 15} cy={15} r={5} /> : null}
+                <text className="wsp-no-perfil" x={12} y={39}>{categoria === "logistica" ? `logística · ${corta(m.perfil.nome, 15)}` : categoria === "jornada" ? "controle de jornada" : "somente registro"}</text>
+                <text className="wsp-no-tag" x={12} y={53}>{m.tipo === "inicio" ? "início da sequência" : m.tipo === "fim" ? "fim da sequência" : "etapa da sequência"}</text>
+                {comErro ? <circle className="wsp-no-erro" cx={NO_W - 34} cy={15} r={5} /> : vigente ? <circle className="wsp-no-dot" cx={NO_W - 34} cy={15} r={5} /> : null}
+                <g
+                  className="wsp-no-lixeira" role="button" aria-label={`Remover macro ${m.nome}`}
+                  onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoverMacro(m); }}
+                  onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                >
+                  <circle cx={NO_W - 14} cy={14} r={10} />
+                  <Trash2 x={NO_W - 20} y={8} width={12} height={12} />
+                </g>
                 {[[NO_W / 2, 0], [NO_W, NO_H / 2], [NO_W / 2, NO_H], [0, NO_H / 2]].map(([x, y], indice) => <circle key={indice} className="wsp-conector" cx={x} cy={y} r={6} onPointerDown={(e) => iniciarLigacao(e, m, x, y)} />)}
               </g>;
             })}
@@ -370,18 +428,19 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
   </section>;
 }
 
-function ListaMacros({ config, selecao, onSelecionar, onAbrirEditor }: { config: ConfiguracaoVeiculo; selecao: SelecaoGrafo; onSelecionar: (s: SelecaoGrafo) => void; onAbrirEditor: (s: SelecaoGrafo) => void }) {
+function ListaMacros({ config, selecao, onSelecionar, onAbrirEditor, onRemoverMacro }: { config: ConfiguracaoVeiculo; selecao: SelecaoGrafo; onSelecionar: (s: SelecaoGrafo) => void; onAbrirEditor: (s: SelecaoGrafo) => void; onRemoverMacro: (macro: MacroVeiculo) => void }) {
   return <div className="wsp-lista-macros">
     <table>
-      <thead><tr><th>MACRO</th><th>PAPEL</th><th>PERFIL</th><th>PODE IR PARA</th></tr></thead>
+      <thead><tr><th>MACRO</th><th>PAPEL</th><th>CATEGORIA / PERFIL</th><th>PODE IR PARA</th><th /></tr></thead>
       <tbody>{config.macros.map((m) => {
         const saidas = config.transicoes.filter((t) => t.de === m.id);
         const sel = selecao.tipo === "macro" && selecao.id === m.id;
         return <tr key={m.id} className={sel ? "sel" : ""}>
           <td><button className="wsp-link" onClick={() => onSelecionar({ tipo: "macro", id: m.id })} onDoubleClick={() => onAbrirEditor({ tipo: "macro", id: m.id })}>{m.nome}</button>{config.macroVigente === m.id ? <span className="wsp-badge-vigente">em curso</span> : null}</td>
           <td>{m.tipo === "inicio" ? "Início" : m.tipo === "fim" ? "Fim" : "Operação"}</td>
-          <td>{m.perfil.nome}</td>
+          <td>{categoriaMacroLabel[categoriaDaMacro(m)]}{categoriaDaMacro(m) === "logistica" ? ` · ${m.perfil.nome}` : " · não altera inteligência"}</td>
           <td>{saidas.length ? saidas.map((t) => config.macros.find((x) => x.id === t.para)?.nome ?? t.para).join(", ") : <em>nenhuma</em>}</td>
+          <td><button className="wsp-lista-excluir" aria-label={`Remover macro ${m.nome}`} title="Remover macro" onClick={() => onRemoverMacro(m)}><Trash2 size={14} /></button></td>
         </tr>;
       })}</tbody>
     </table>
