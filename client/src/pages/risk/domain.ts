@@ -924,18 +924,26 @@ export const pontosIniciais: PontoDeControle[] = [
 export type Cerca = {
   id: string;
   nome: string;
+  descricao?: string;
   categoria: "restrita" | "operacional" | "velocidade" | "horario";
   politica: { permanenciaMaxMin: number | null; limiteKmh: number | null; janela: string };
   ativa: boolean;
   local: string;
   versao: number;
+  /** A geometria é cadastrada uma vez e depois vinculada aos veículos. */
+  forma?: "corredor" | "poligono" | "circular";
+  toleranciaM?: number;
+  extensaoKm?: number;
+  veiculos?: string[];
+  vigenciaInicio?: string;
+  vigenciaFim?: string | null;
 };
 
 export const cercasIniciais: Cerca[] = [
-  { id: "CE-01", nome: "Anel Rodoviário · faixa 2", categoria: "velocidade", politica: { permanenciaMaxMin: null, limiteKmh: 80, janela: "24h" }, ativa: true, local: "Belo Horizonte · MG", versao: 2 },
-  { id: "CE-02", nome: "Área restrita · Pátio Itaguaí", categoria: "restrita", politica: { permanenciaMaxMin: 0, limiteKmh: null, janela: "24h" }, ativa: true, local: "Itaguaí · RJ", versao: 3 },
-  { id: "CE-03", nome: "Base Campinas · portaria noturna", categoria: "horario", politica: { permanenciaMaxMin: null, limiteKmh: null, janela: "22:00–05:00" }, ativa: false, local: "Campinas · SP", versao: 1 },
-  { id: "CE-04", nome: "Perímetro urbano Rio · centro", categoria: "operacional", politica: { permanenciaMaxMin: 40, limiteKmh: 50, janela: "06:00–22:00" }, ativa: true, local: "Rio de Janeiro · RJ", versao: 6 },
+  { id: "CE-01", nome: "Anel Rodoviário · faixa 2", categoria: "velocidade", politica: { permanenciaMaxMin: null, limiteKmh: 80, janela: "24h" }, ativa: true, local: "Belo Horizonte · MG", versao: 2, forma: "corredor", toleranciaM: 300, extensaoKm: 38, veiculos: ["VTR-1783"], vigenciaInicio: "2026-09-01", vigenciaFim: null },
+  { id: "CE-02", nome: "Área restrita · Pátio Itaguaí", categoria: "restrita", politica: { permanenciaMaxMin: 0, limiteKmh: null, janela: "24h" }, ativa: true, local: "Itaguaí · RJ", versao: 3, forma: "poligono", toleranciaM: 30, extensaoKm: 4.2, veiculos: ["VTR-2048", "VTR-0931"], vigenciaInicio: "2026-09-02", vigenciaFim: null },
+  { id: "CE-03", nome: "Base Campinas · portaria noturna", categoria: "horario", politica: { permanenciaMaxMin: null, limiteKmh: null, janela: "22:00–05:00" }, ativa: false, local: "Campinas · SP", versao: 1, forma: "circular", toleranciaM: 50, extensaoKm: 0.8, veiculos: [], vigenciaInicio: "2026-08-20", vigenciaFim: "2026-09-05" },
+  { id: "CE-04", nome: "Perímetro urbano Rio · centro", categoria: "operacional", politica: { permanenciaMaxMin: 40, limiteKmh: 50, janela: "06:00–22:00" }, ativa: true, local: "Rio de Janeiro · RJ", versao: 6, forma: "poligono", toleranciaM: 100, extensaoKm: 17.4, veiculos: ["VTR-2048", "VTR-3110"], vigenciaInicio: "2026-09-01", vigenciaFim: null },
 ];
 
 // -------------------------------------------------------------------- Rotas

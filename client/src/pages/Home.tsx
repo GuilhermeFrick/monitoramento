@@ -347,13 +347,13 @@ function MainApp() {
     : activeView === "reports" ? <ReportsView onToast={notify} />
     : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
     : activeView === "equipment" ? <EquipmentConfigView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
-    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} onToast={notify} />
-    : activeView === "fences" ? <FencesView onToast={notify} />
+    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
+    : activeView === "fences" ? <FencesView configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
     : activeView === "routes" ? <RoutesView onToast={notify} onGoRotograma={() => chooseView("controlpoints")} />
     : activeView === "provisioning" ? <ProvisioningView pontos={pontos} onToast={notify} />
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;
-  const emWorkspace = activeView === "profiles" || activeView === "equipment";
+  const emWorkspace = activeView === "profiles" || activeView === "equipment" || activeView === "controlpoints" || activeView === "fences";
   return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><Sidebar active={activeView} onSelect={chooseView} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((atual) => !atual)} mobileOpen={sidebarOpen} /><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} compact /><main className={emWorkspace ? "content content-workspace profile-topbar" : "content"}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
 }
 
