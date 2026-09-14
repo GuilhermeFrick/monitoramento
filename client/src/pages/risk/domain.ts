@@ -1015,11 +1015,68 @@ export const nivelDesvioTone: Record<NivelDesvio, "teal" | "blue" | "amber" | "r
 
 export type Trecho = { id: string; de: string; para: string; duracaoMin: number; distanciaKm: number; limites: { velocidadeKmh: number; paradaMaxMin: number; direcaoContinuaMaxMin: number } };
 
-export type Rotograma = { id: string; nome: string; veiculo: string; rota: string; trechos: Trecho[]; trechoAtual: number; desvioMin: number; nivel: NivelDesvio; versao: number };
+/**
+ * De onde veio o traçado da jornada.
+ *
+ * A plataforma **não roteiriza**: quem calcula caminho é serviço externo (Google
+ * Directions, HERE, OSRM). O que ela faz é registrar a procedência, porque isso
+ * muda o que o operador pode esperar do resultado — um traçado do catálogo foi
+ * revisado por alguém, um importado veio de fora sem validação, e um roteirizado
+ * depende do perfil de veículo que foi pedido ao provedor.
+ *
+ * Seja qual for a fonte, o que se embarca é sempre uma polilinha só: por isso
+ * `Rotograma.tracado` guarda a geometria, e a fonte fica ao lado como histórico.
+ */
+export type FonteTracado =
+  | { tipo: "catalogo"; rotaId: string; em: string }
+  | { tipo: "importacao"; arquivo: string; formato: FormatoImportacao; verticesOriginais: number; em: string }
+  | { tipo: "roteirizacao"; provedor: string; perfil: PerfilRoteirizacao; em: string };
+
+export type FormatoImportacao = "gpx" | "kml" | "geojson";
+
+/** O que se pede ao roteirizador. Um caminhão não faz o mesmo caminho que uma van. */
+export type PerfilRoteirizacao = {
+  veiculo: "van" | "caminhao" | "carreta";
+  evitarPedagio: boolean;
+  evitarBalsa: boolean;
+  evitarViaNaoPavimentada: boolean;
+  /** Restrições físicas que o provedor usa para descartar vias. */
+  alturaM: number;
+  pesoT: number;
+};
+
+export const perfilRoteirizacaoPadrao: PerfilRoteirizacao = {
+  veiculo: "caminhao", evitarPedagio: false, evitarBalsa: true, evitarViaNaoPavimentada: true, alturaM: 4.4, pesoT: 23,
+};
+
+export const veiculoRoteirizacaoLabel: Record<PerfilRoteirizacao["veiculo"], string> = {
+  van: "Van urbana", caminhao: "Caminhão", carreta: "Carreta",
+};
+
+export const fonteTracadoLabel: Record<FonteTracado["tipo"], string> = {
+  catalogo: "Rota do catálogo", importacao: "Arquivo importado", roteirizacao: "Roteirizador",
+};
+
+export type Rotograma = {
+  id: string;
+  nome: string;
+  veiculo: string;
+  /** Rota do catálogo que originou o traçado, quando houver. Vazio em jornada própria. */
+  rota: string;
+  /** A polilinha efetivamente embarcada, com o corredor de tolerância. */
+  tracado: GeometriaLinha | null;
+  fonte: FonteTracado | null;
+  trechos: Trecho[];
+  trechoAtual: number;
+  desvioMin: number;
+  nivel: NivelDesvio;
+  versao: number;
+};
 
 export const rotogramasIniciais: Rotograma[] = [
   {
     id: "RG-2048", nome: "Jornada VTR-2048 · 08 set", veiculo: "VTR-2048", rota: "RT-01", trechoAtual: 1, desvioMin: 32, nivel: "atrasada", versao: 2,
+    tracado: rotasIniciais[0].geometria, fonte: { tipo: "catalogo", rotaId: "RT-01", em: "2026-09-08T05:30:00" },
     trechos: [
       { id: "T1", de: "PC-003", para: "PC-005", duracaoMin: 240, distanciaKm: 260, limites: { velocidadeKmh: 90, paradaMaxMin: 15, direcaoContinuaMaxMin: 240 } },
       { id: "T2", de: "PC-005", para: "PC-006", duracaoMin: 210, distanciaKm: 240, limites: { velocidadeKmh: 80, paradaMaxMin: 10, direcaoContinuaMaxMin: 210 } },
@@ -1028,6 +1085,7 @@ export const rotogramasIniciais: Rotograma[] = [
   },
   {
     id: "RG-1783", nome: "Jornada VTR-1783 · 08 set", veiculo: "VTR-1783", rota: "RT-02", trechoAtual: 0, desvioMin: -48, nivel: "muito_adiantada", versao: 1,
+    tracado: rotasIniciais[1].geometria, fonte: { tipo: "catalogo", rotaId: "RT-02", em: "2026-09-08T05:30:00" },
     trechos: [
       { id: "T1", de: "PC-004", para: "PC-005", duracaoMin: 300, distanciaKm: 310, limites: { velocidadeKmh: 80, paradaMaxMin: 20, direcaoContinuaMaxMin: 240 } },
       { id: "T2", de: "PC-005", para: "PC-002", duracaoMin: 120, distanciaKm: 128, limites: { velocidadeKmh: 80, paradaMaxMin: 10, direcaoContinuaMaxMin: 120 } },
@@ -1035,12 +1093,16 @@ export const rotogramasIniciais: Rotograma[] = [
   },
   {
     id: "RG-3110", nome: "Jornada VTR-3110 · 08 set", veiculo: "VTR-3110", rota: "RT-01", trechoAtual: 0, desvioMin: 4, nivel: "no_prazo", versao: 1,
+    tracado: { tipo: "linha", corredorM: 400, vertices: [{ lat: -22.9056, lng: -47.0608 }, { lat: -22.9670, lng: -46.5390 }, { lat: -23.1790, lng: -45.8870 }, { lat: -22.9660, lng: -45.1180 }, { lat: -22.5372, lng: -44.7756 }, { lat: -22.7900, lng: -44.0480 }, { lat: -22.9270, lng: -43.8180 }] },
+    fonte: { tipo: "roteirizacao", provedor: "Roteirizador de demonstração", perfil: perfilRoteirizacaoPadrao, em: "2026-09-08T04:10:00" },
     trechos: [
       { id: "T1", de: "PC-003", para: "PC-001", duracaoMin: 480, distanciaKm: 512, limites: { velocidadeKmh: 90, paradaMaxMin: 15, direcaoContinuaMaxMin: 240 } },
     ],
   },
   {
-    id: "RG-0931", nome: "Jornada VTR-0931 · 08 set", veiculo: "VTR-0931", rota: "RT-03", trechoAtual: 0, desvioMin: 95, nivel: "muito_atrasada", versao: 3,
+    id: "RG-0931", nome: "Jornada VTR-0931 · 08 set", veiculo: "VTR-0931", rota: "", trechoAtual: 0, desvioMin: 95, nivel: "muito_atrasada", versao: 3,
+    tracado: { tipo: "linha", corredorM: 150, vertices: [{ lat: -22.9350, lng: -43.8280 }, { lat: -22.9318, lng: -43.8244 }, { lat: -22.9296, lng: -43.8206 }, { lat: -22.9270, lng: -43.8180 }] },
+    fonte: { tipo: "importacao", arquivo: "alca-portuaria-itaguai.gpx", formato: "gpx", verticesOriginais: 412, em: "2026-09-07T18:22:00" },
     trechos: [
       { id: "T1", de: "PC-006", para: "PC-001", duracaoMin: 25, distanciaKm: 11, limites: { velocidadeKmh: 40, paradaMaxMin: 0, direcaoContinuaMaxMin: 60 } },
     ],

@@ -1120,7 +1120,11 @@ tbody tr:hover { background: #fbfdfd; }
 /* ------------------------------ Mapa real (Leaflet) ------------------------------
    O mapa é fundo de trabalho, não ilustração: base neutra, e a cor forte reservada
    para a geometria — cerca, ponto, corredor e sobreposição. */
-.mapa-geo { position: relative; flex: 1; min-height: 260px; border-radius: 10px; overflow: hidden; border: 1px solid #e6edf1; background: #eef2f5; }
+/* `isolation` não é enfeite: os painéis internos do Leaflet usam z-index até 800
+   e o contêiner dele não cria contexto de empilhamento sozinho. Sem isto, o mapa
+   pinta por cima de qualquer modal (backdrop em z-index 40) — inclusive dos
+   diálogos de novo ponto, nova cerca e definição de traçado. */
+.mapa-geo { position: relative; isolation: isolate; flex: 1; min-height: 260px; border-radius: 10px; overflow: hidden; border: 1px solid #e6edf1; background: #eef2f5; }
 .mapa-tela { position: absolute; inset: 0; }
 .mapa-carregando { position: absolute; inset: 0; display: grid; place-items: center; background: #eef2f5; }
 .mapa-carregando span { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #cfd9e0; border-top-color: #0f7c75; animation: girar .9s linear infinite; }
@@ -1224,3 +1228,57 @@ tr.linha-selecionada { background: #f2faf8; box-shadow: inset 3px 0 0 #0f7c75; }
 .geo-painel-toggle:hover { border-color: #b6d6d1; color: #0f716b; background: #eef7f5; }
 .geo-inspetor-acao { display: flex; justify-content: flex-end; }
 @media (max-width: 1180px) { .geo-trilho-atalhos button { width: 32px; height: 32px; } }
+
+/* ------------------------ Definição do traçado da viagem ------------------------ */
+.geo-tracado-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 7px 13px 8px; border-bottom: 1px solid #eef2f4; }
+.tracado-fonte { display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #0f716b; background: #eef7f5; border-radius: 999px; padding: 4px 9px; }
+.tracado-fonte.sem { color: #8a5b16; background: #fff7e8; }
+.geo-sem-tracado { display: flex; align-items: flex-start; gap: 8px; margin: 8px 13px 0; padding: 8px 10px; border-radius: 8px; font-size: 9.5px; line-height: 1.45; color: #8a5b16; background: #fff7e8; border: 1px solid #f4e2bf; }
+.tracado-abas { width: 100%; margin-bottom: 12px; }
+.tracado-abas button { flex: 1; justify-content: center; }
+.tracado-nota { margin: 0 0 10px; font-size: 10px; line-height: 1.5; color: #667889; }
+.tracado-vazio { margin: 10px 0; font-size: 10.5px; color: #7b8a99; line-height: 1.5; }
+.tracado-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 12px; align-items: start; }
+.tracado-lista { display: flex; flex-direction: column; gap: 5px; max-height: 250px; overflow-y: auto; }
+.tracado-item { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; align-items: center; text-align: left; border: 1px solid #e6edf1; border-radius: 8px; background: #fff; padding: 9px 11px; color: #33485d; cursor: pointer; }
+.tracado-item:hover { border-color: #b6d6d1; }
+.tracado-item.selecionado { border-color: #0f7c75; background: #eef7f5; }
+.tracado-item strong { display: block; font-size: 10.5px; } .tracado-item small { font-size: 9px; color: #7b8a99; }
+.tracado-mapa { display: flex; flex-direction: column; gap: 8px; }
+.tracado-solta { display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; border: 1.5px dashed #cfd9e0; border-radius: 10px; padding: 14px; color: #0f7c75; background: #fbfdfd; margin-bottom: 10px; }
+.tracado-solta strong { display: block; font-size: 10.5px; color: #33485d; } .tracado-solta small { font-size: 9px; color: #7b8a99; }
+.tracado-erro { display: flex; align-items: center; gap: 7px; margin: 8px 0; padding: 8px 10px; border-radius: 8px; font-size: 9.5px; color: #a4423c; background: #fff0ee; border: 1px solid #f5cfcb; }
+.tracado-resumo h4 { margin: 0 0 8px; font-size: 11px; color: #22364b; }
+.tracado-resumo dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 0 0 10px; }
+.tracado-resumo dt { font-size: 8.5px; font-weight: 800; color: #8b98a6; text-transform: uppercase; letter-spacing: .05em; }
+.tracado-resumo dd { margin: 2px 0 0; font-size: 11px; color: #33485d; font-family: 'DM Mono', ui-monospace, monospace; }
+.tracado-aviso { margin: 8px 0 0; font-size: 9px; line-height: 1.5; color: #8a5b16; background: #fff7e8; border: 1px solid #f4e2bf; border-radius: 8px; padding: 8px 10px; }
+.tracado-paradas-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 10.5px; color: #22364b; }
+.tracado-paradas ol { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.tracado-paradas li { display: grid; grid-template-columns: 22px 1fr auto auto auto; gap: 4px; align-items: center; }
+.tracado-parada-num { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 800; color: #64748b; background: #eef2f5; }
+.tracado-parada-num.origem { color: #fff; background: #0f7c75; } .tracado-parada-num.destino { color: #fff; background: #183b3a; }
+.tracado-paradas select { min-width: 0; height: 28px; border: 1px solid #dfe6eb; border-radius: 6px; padding: 0 6px; font-size: 10px; color: #33485d; background: #fff; }
+.tracado-paradas li > button { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #e2e9ed; border-radius: 5px; background: #fff; color: #6b7a8a; cursor: pointer; }
+.tracado-paradas li > button:hover:not(:disabled) { border-color: #b6d6d1; color: #0f716b; }
+.tracado-paradas li > button:disabled { opacity: .35; cursor: not-allowed; }
+.tracado-perfil-toggle { width: 100%; display: flex; align-items: center; gap: 6px; border: 1px solid #e6edf1; border-radius: 8px; background: #fbfdfd; padding: 8px 10px; font-size: 10px; font-weight: 700; color: #33485d; cursor: pointer; }
+.tracado-perfil-toggle small { font-weight: 500; color: #8b98a6; font-size: 9px; margin-left: auto; text-align: right; }
+.tracado-perfil { display: flex; flex-direction: column; gap: 8px; border: 1px solid #e6edf1; border-top: 0; border-radius: 0 0 8px 8px; padding: 10px; }
+.tracado-perfil > label, .tracado-perfil .geo-campos > label { display: grid; gap: 4px; font-size: 9px; font-weight: 750; color: #7d8b98; }
+.tracado-perfil select { height: 30px; border: 1px solid #dfe6eb; border-radius: 6px; padding: 0 7px; font-size: 10.5px; color: #33485d; background: #fff; }
+.tracado-check { display: flex !important; flex-direction: row !important; align-items: center; gap: 7px; font-size: 10px; font-weight: 500 !important; color: #33485d !important; }
+.tracado-check input { accent-color: #0f7c75; }
+.tracado-calcular { width: 100%; margin-top: 10px; }
+.tracado-pernas { border: 1px solid #e6edf1; border-radius: 8px; padding: 9px 10px; background: #fbfdfd; }
+.tracado-pernas-topo { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: #22364b; margin-bottom: 6px; }
+.tracado-pernas-topo span { font-size: 9px; color: #8b98a6; }
+.tracado-pernas ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tracado-pernas li { display: flex; justify-content: space-between; gap: 10px; font-size: 9.5px; color: #5a6b7d; }
+.tracado-pernas li strong { color: #22364b; font-family: 'DM Mono', ui-monospace, monospace; white-space: nowrap; }
+.tracado-aviso-provedor { display: grid; grid-template-columns: auto 1fr; gap: 9px; margin-top: 12px; padding: 10px 12px; border-radius: 9px; color: #8a5b16; background: #fff7e8; border: 1px solid #f4e2bf; }
+.tracado-aviso-provedor strong { display: block; font-size: 10.5px; margin-bottom: 3px; }
+.tracado-aviso-provedor span { font-size: 9.5px; line-height: 1.5; }
+.girando { animation: girar .9s linear infinite; }
+@media (max-width: 760px) { .tracado-corpo { grid-template-columns: 1fr; } .tracado-solta { grid-template-columns: 1fr; text-align: center; justify-items: center; } }
+.mapa-falha .secondary-btn { margin-top: 8px; }

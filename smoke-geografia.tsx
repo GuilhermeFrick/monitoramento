@@ -16,6 +16,9 @@ const { RoutesView } = await import("./client/src/pages/risk/views/RoutesView");
 const { VehicleNavigator } = await import("./client/src/pages/risk/views/perfil/VehicleNavigator");
 const d = await import("./client/src/pages/risk/domain");
 const g = await import("./client/src/pages/risk/mapa/geometria");
+const imp = await import("./client/src/pages/risk/mapa/importarTracado");
+const rot = await import("./client/src/pages/risk/mapa/roteirizador");
+const { TracadoDialog } = await import("./client/src/pages/risk/views/TracadoDialog");
 
 let ok = true;
 const falhar = (mensagem: string) => { console.log("  FALHA:", mensagem); ok = false; };
@@ -74,6 +77,40 @@ const todas = [...d.pontosIniciais.map((p) => p.geometria), ...d.cercasIniciais.
 const foraDoBrasil = todas.flatMap(g.verticesDe).filter((v) => v.lat > 5 || v.lat < -34 || v.lng > -34 || v.lng < -74);
 if (foraDoBrasil.length) falhar(`${foraDoBrasil.length} coordenada(s) fora do Brasil`);
 else console.log(`  ok [coordenadas] ${todas.length} geometrias dentro do território`);
+
+render("diálogo de traçado", createElement(TracadoDialog as any, {
+  rotas: d.rotasIniciais, pontos: d.pontosIniciais, paradasAtuais: ["PC-003", "PC-001"],
+  corredorPadrao: 300, onClose: () => {}, onAplicar: () => {},
+}), ["Definir o traçado", "Catálogo", "Importar arquivo", "Roteirizar"]);
+
+// Importar é a parte que não depende de serviço externo, então é testada de
+// verdade. GPX e KML precisam de DOMParser, que não existe no Node — aqui fica
+// o GeoJSON, que é JSON puro, mais a simplificação, que é onde mora o risco.
+try {
+  const linha = { type: "Feature", geometry: { type: "LineString", coordinates: Array.from({ length: 900 }, (_, i) => [-47 + i * 0.004, -22.9 + Math.sin(i / 9) * 0.05]) } };
+  const r = imp.importarTracado("rota.geojson", JSON.stringify(linha), 300);
+  if (r.verticesOriginais !== 900) falhar(`GeoJSON: esperava 900 pontos, veio ${r.verticesOriginais}`);
+  else if (r.verticesFinais > imp.MAX_VERTICES_LINHA) falhar(`simplificação não respeitou o teto: ${r.verticesFinais} > ${imp.MAX_VERTICES_LINHA}`);
+  else if (r.verticesFinais < 2) falhar("simplificação destruiu o traçado");
+  else console.log(`  ok [importar geojson] ${r.verticesOriginais} -> ${r.verticesFinais} vértices, ${r.extensaoKm} km`);
+} catch (e) { falhar(`importar geojson: ${(e as Error).message}`); }
+
+try {
+  imp.importarTracado("rota.txt", "nada", 300);
+  falhar("formato desconhecido deveria ser recusado");
+} catch (e) { console.log(`  ok [importar] formato desconhecido recusado: ${(e as Error).message.slice(0, 40)}…`); }
+
+// O roteirizador é stub, e o que precisa estar certo é o contrato: uma perna por
+// par de paradas, e o aviso de que não é roteirização real sempre presente.
+try {
+  const paradas = ["PC-003", "PC-005", "PC-001"].map((id) => g.centroDe(d.pontosIniciais.find((p) => p.id === id)!.geometria));
+  const resposta = await rot.roteirizar({ paradas, perfil: d.perfilRoteirizacaoPadrao, corredorM: 300 });
+  if (resposta.pernas.length !== paradas.length - 1) falhar(`esperava ${paradas.length - 1} pernas, veio ${resposta.pernas.length}`);
+  else if (!resposta.aviso) falhar("roteirização de demonstração precisa devolver aviso, senão passa por real");
+  else if (resposta.geometria.vertices.length < paradas.length) falhar("traçado com menos vértices que paradas");
+  else if (resposta.pernas.some((perna) => perna.distanciaKm <= 0 || perna.duracaoMin <= 0)) falhar("perna sem distância ou duração");
+  else console.log(`  ok [roteirizar] ${resposta.pernas.length} pernas, ${resposta.geometria.vertices.length} vértices, aviso presente`);
+} catch (e) { falhar(`roteirizar: ${(e as Error).message}`); }
 
 console.log(ok ? "\nOK — geografia operacional renderiza e respeita as restrições do equipamento" : "\nfalhou");
 process.exit(ok ? 0 : 1);

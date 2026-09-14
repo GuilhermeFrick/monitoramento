@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, Clock3, Layers, MapPin, MapPinned, Plus, Send, Sliders, Upload } from "lucide-react";
+import { AlertTriangle, Check, Clock3, Layers, MapPin, MapPinned, Pencil, Plus, Route, Send, Sliders, Upload } from "lucide-react";
 import { Modal, Tag, Toggle, useStoredState } from "../shared";
 import {
   MAX_VERTICES_POLIGONO, STORAGE, catalogoMacros, categoriaPontoLabel, newId, nivelDesvioLabel,
   nivelDesvioTone, nomeMacro, nomePonto, pontosIniciais, rotogramasIniciais,
-  type CategoriaPonto, type ConfiguracaoVeiculo, type GeometriaArea, type PontoDeControle, type Rotograma, type TipoGeometria, type Trecho,
+  rotasIniciais,
+  type CategoriaPonto, type ConfiguracaoVeiculo, type GeometriaArea, type PontoDeControle, type Rota, type Rotograma, type TipoGeometria, type Trecho,
 } from "../domain";
 import { MapaGeo, type FormaMapa } from "../mapa/MapaGeo";
 import { PainelRecolhivel } from "../mapa/PainelRecolhivel";
+import { TracadoDialog, ResumoFonte, type TracadoEscolhido } from "./TracadoDialog";
 import { BarraFerramentas, EditorGeometria } from "../mapa/EditorGeometria";
 import { centroDe, medidaDe, paresSobrepostos } from "../mapa/geometria";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./perfil/VehicleNavigator";
@@ -47,6 +49,8 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
   const [listaRecolhida, setListaRecolhida] = useStoredState(STORAGE.painelPontos, false);
   const [inspetorRecolhido, setInspetorRecolhido] = useStoredState(STORAGE.inspetorPontos, false);
   const [itinerarioRecolhido, setItinerarioRecolhido] = useStoredState(STORAGE.painelItinerario, false);
+  const [rotas] = useStoredState<Rota[]>(STORAGE.rotas, rotasIniciais);
+  const [showTracado, setShowTracado] = useState(false);
   const [navegadorRecolhidoLocal, setNavegadorRecolhidoLocal] = useState(false);
   const navegadorRecolhido = arvore?.estado.painelRecolhido ?? navegadorRecolhidoLocal;
   const config = configs.find((c) => c.veiculo === veiculo.atual) ?? configs[0];
@@ -72,6 +76,37 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
     setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, trechos: r.trechos.map((t) => t.id === id ? fn(t) : t) } : r));
     onRascunho?.([rotograma.veiculo], `Limites do trecho ajustados · ${rotograma.id}`);
   };
+  /**
+   * Aplica o traçado escolhido e, quando ele veio do roteirizador, reconstrói os
+   * trechos a partir das paradas — distância e duração passam a ser as que o
+   * provedor calculou, em vez de números digitados à mão.
+   */
+  const aplicarTracado = (escolha: TracadoEscolhido) => {
+    if (!rotograma) return;
+    setRotogramas((atuais) => atuais.map((r) => {
+      if (r.id !== rotograma.id) return r;
+      const trechos = escolha.paradas && escolha.pernas
+        ? escolha.paradas.slice(0, -1).map((de, i) => {
+            const para = escolha.paradas![i + 1];
+            const anterior = r.trechos.find((t) => t.de === de && t.para === para) ?? r.trechos[i];
+            return {
+              id: anterior?.id ?? `T${i + 1}`,
+              de, para,
+              distanciaKm: escolha.pernas![i].distanciaKm,
+              duracaoMin: escolha.pernas![i].duracaoMin,
+              limites: anterior?.limites ?? { velocidadeKmh: 80, paradaMaxMin: 15, direcaoContinuaMaxMin: 240 },
+            };
+          })
+        : r.trechos;
+      return { ...r, tracado: escolha.tracado, fonte: escolha.fonte, rota: escolha.rotaId, trechos, trechoAtual: Math.min(r.trechoAtual, Math.max(0, trechos.length - 1)) };
+    }));
+    setShowTracado(false);
+    onRascunho?.([rotograma.veiculo], `Traçado da jornada redefinido · ${rotograma.id}`);
+    onToast(escolha.fonte.tipo === "roteirizacao"
+      ? "Traçado calculado e trechos atualizados com a distância e a duração do provedor."
+      : "Traçado aplicado à jornada.");
+  };
+
   const publicar = () => {
     if (!rotograma) return;
     setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, versao: r.versao + 1 } : r));
@@ -97,6 +132,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
         <header className="wsp-canvas-toolbar geo-toolbar">
           <div className="eq-identidade"><MapPinned size={17} /><div><h2>{config.veiculo} · {aba === "rotograma" ? "Rotograma" : "Pontos de controle"}</h2><p>{rotograma ? `${rotograma.nome} · rota ${rotograma.rota} · v${rotograma.versao}` : "Nenhum rotograma vinculado"}</p></div></div>
           <div className="geo-toolbar-acoes">
+            {aba === "rotograma" && rotograma ? <button className="geo-btn" onClick={() => setShowTracado(true)}><Route size={13} /> {rotograma.tracado ? "Trocar traçado" : "Definir traçado"}</button> : null}
             {aba === "rotograma" && rotograma ? <button className="geo-btn primario" onClick={publicar}><Send size={13} /> Publicar</button> : null}
             {aba === "pontos" ? <button className="geo-btn primario" onClick={() => setShowNew(true)}><Plus size={13} /> Novo ponto</button> : null}
           </div>
@@ -113,7 +149,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
           {aba === "rotograma" ? <RotogramaWorkspace
             rotograma={rotograma} pontos={pontos} trecho={trechoSelecionado}
             recolhido={itinerarioRecolhido} onRecolher={() => setItinerarioRecolhido(!itinerarioRecolhido)}
-            onTrecho={setTrechoId} onPatch={patchTrecho}
+            onTrecho={setTrechoId} onPatch={patchTrecho} onDefinirTracado={() => setShowTracado(true)}
           /> : null}
           {aba === "pontos" ? <PontosWorkspace
             pontos={pontos} selecionado={pontoSelecionado} noRotograma={idsNoRotograma}
@@ -127,6 +163,14 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
       </section>
     </div>
     {showNew ? <NewPointModal onClose={() => setShowNew(false)} onCreate={criarPonto} /> : null}
+    {showTracado && rotograma ? <TracadoDialog
+      rotas={rotas}
+      pontos={pontos}
+      paradasAtuais={rotograma.trechos.length ? [rotograma.trechos[0].de, ...rotograma.trechos.map((t) => t.para)] : []}
+      corredorPadrao={rotograma.tracado?.corredorM ?? 300}
+      onClose={() => setShowTracado(false)}
+      onAplicar={aplicarTracado}
+    /> : null}
   </div>;
 }
 
@@ -136,7 +180,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
 // pontos na ordem dos trechos e mostra qual está em curso — por isso aqui não há
 // barra de ferramentas de desenho, só leitura e os limites por trecho.
 
-function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, onTrecho, onPatch }: {
+function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, onTrecho, onPatch, onDefinirTracado }: {
   rotograma?: Rotograma;
   pontos: PontoDeControle[];
   trecho?: Trecho;
@@ -144,10 +188,22 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
   onRecolher: () => void;
   onTrecho: (id: string) => void;
   onPatch: (id: string, fn: (t: Trecho) => Trecho) => void;
+  onDefinirTracado: () => void;
 }) {
   const formas = useMemo<FormaMapa[]>(() => {
     if (!rotograma) return [];
     const lista: FormaMapa[] = [];
+    // Com traçado definido, ele é o que o veículo segue e o que se embarca. As
+    // ligações diretas entre paradas ficam só para a jornada ainda sem traçado,
+    // onde valem como esboço do plano — e aí a tela pede para definir o traçado.
+    if (rotograma.tracado) {
+      lista.push({
+        id: `${rotograma.id}-tracado`,
+        estilo: "rota",
+        geometria: rotograma.tracado,
+        rotulo: `Traçado da viagem · corredor ${rotograma.tracado.corredorM} m`,
+      });
+    }
     rotograma.trechos.forEach((t, indice) => {
       const de = pontos.find((p) => p.id === t.de);
       const para = pontos.find((p) => p.id === t.para);
@@ -155,7 +211,7 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
       const estado = indice < rotograma.trechoAtual ? "trecho-feito" : indice === rotograma.trechoAtual ? "trecho-atual" : "trecho";
       lista.push({
         id: `${rotograma.id}-${t.id}`,
-        estilo: estado,
+        estilo: rotograma.tracado && estado === "trecho" ? "trecho" : estado,
         rotulo: `Trecho ${indice + 1} · ${t.distanciaKm} km · ${t.duracaoMin} min · máx ${t.limites.velocidadeKmh} km/h`,
         geometria: { tipo: "linha", corredorM: 0, vertices: [centroDe(de.geometria), centroDe(para.geometria)] },
         aoClicar: () => onTrecho(t.id),
@@ -181,9 +237,18 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
   return <div className={`geo-rotograma-grid ${recolhido ? "itinerario-recolhido" : ""}`}>
     <div className="geo-mapa-card">
       <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{totalKm} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
-      <MapaGeo formas={formas} ajuste={`rg-${rotograma.id}`} rotulo={`Mapa do rotograma de ${rotograma.veiculo}`} />
+      <div className="geo-tracado-barra">
+        <ResumoFonte fonte={rotograma.fonte} />
+        <button className="geo-btn" onClick={onDefinirTracado}><Pencil size={12} /> {rotograma.tracado ? "Trocar traçado" : "Definir traçado"}</button>
+      </div>
+      {!rotograma.tracado ? <div className="geo-sem-tracado">
+        <AlertTriangle size={13} />
+        <span>Esta jornada ainda não tem traçado: as linhas do mapa ligam as paradas em reta e servem só como esboço. Escolha uma rota do catálogo, importe um arquivo ou roteirize as paradas.</span>
+      </div> : null}
+      <MapaGeo formas={formas} ajuste={`rg-${rotograma.id}-${rotograma.fonte?.em ?? ""}`} rotulo={`Mapa do rotograma de ${rotograma.veiculo}`} />
       <div className="geo-legenda">
         <span><i className="feito" /> concluído</span><span><i className="atual" /> em curso</span><span><i /> planejado</span>
+        <span><i className="rota" /> traçado</span>
         <span className="geo-legenda-nota">adiantar também é desvio</span>
       </div>
     </div>

@@ -82,6 +82,24 @@ const ESTILOS: Record<EstiloForma, LeafletNS.PathOptions> = {
   "trecho-atual": { color: "#4f66a8", weight: 4 },
 };
 
+/**
+ * Buscar o módulo do mapa, com uma segunda chance.
+ *
+ * A carga do chunk falha de vez em quando por motivo passageiro — rede instável,
+ * ou a janela em que um deploy novo já trocou o `index.html` mas o navegador
+ * ainda pede o arquivo antigo. Uma tentativa extra resolve a maioria desses
+ * casos sem o operador perceber; o que sobrar cai na tela de falha, que tem
+ * botão para tentar de novo à mão.
+ */
+async function carregarLeaflet(): Promise<typeof LeafletNS> {
+  try {
+    return await import("leaflet");
+  } catch {
+    await new Promise((resolver) => window.setTimeout(resolver, 400));
+    return await import("leaflet");
+  }
+}
+
 const paraLL = (p: LatLng): [number, number] => [p.lat, p.lng];
 const daLL = (p: LeafletNS.LatLng): LatLng => ({ lat: p.lat, lng: p.lng });
 
@@ -112,6 +130,12 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
   refDesenhando.current = desenhando;
   const [pronto, setPronto] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
+  /**
+   * Uma falha de rede na carga do mapa não pode ser definitiva: sem isto, um
+   * chunk que não chegou por um instante deixa o card cinza até alguém recarregar
+   * a página inteira, perdendo o que estava editando.
+   */
+  const [tentativa, setTentativa] = useState(0);
   const [medida, setMedida] = useState<string | null>(null);
   const [dicaDesenho, setDicaDesenho] = useState<string | null>(null);
 
@@ -123,7 +147,7 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
       // O Leaflet é publicado como UMD: conforme o empacotador, os nomes vêm no
       // namespace ou atrás de `default`. Aceitar os dois evita um mapa que fica
       // em branco sem dizer por quê.
-      const modulo = await import("leaflet");
+      const modulo = await carregarLeaflet();
       const L = ((modulo as unknown as { default?: typeof LeafletNS }).default ?? modulo) as typeof LeafletNS;
       if (!vivo || !hospedeiro.current) return;
       if (typeof L?.map !== "function") throw new Error("módulo do mapa carregou sem a função `map`");
@@ -148,7 +172,7 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
       if (vivo) setFalha(erro instanceof Error ? erro.message : "erro desconhecido");
     });
     return () => { vivo = false; instancia?.remove(); mapa.current = null; setPronto(false); };
-  }, []);
+  }, [tentativa]);
 
   // Acompanha o card quando o painel lateral recolhe ou a janela muda.
   useEffect(() => {
@@ -315,7 +339,12 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
 
   return <div className="mapa-geo" style={altura ? { height: altura } : undefined}>
     <div ref={hospedeiro} className="mapa-tela" role="application" aria-label={rotulo} />
-    {falha ? <div className="mapa-falha" role="alert"><strong>O mapa não carregou.</strong><span>{falha}</span><span>A geometria continua editável pelos campos do inspetor.</span></div>
+    {falha ? <div className="mapa-falha" role="alert">
+        <strong>O mapa não carregou.</strong>
+        <span>{falha}</span>
+        <span>A geometria continua editável pelos campos do inspetor.</span>
+        <button type="button" className="secondary-btn" onClick={() => { setFalha(null); setTentativa((n) => n + 1); }}>Tentar de novo</button>
+      </div>
       : !pronto ? <div className="mapa-carregando" aria-hidden="true"><span /></div> : null}
     {medida ? <div className="mapa-medida" role="status">{medida}</div> : null}
     {dicaDesenho ? <div className="mapa-dica" role="status">{dicaDesenho}</div> : null}
