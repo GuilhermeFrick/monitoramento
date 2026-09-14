@@ -1,18 +1,24 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, Clock3, MapPin, MapPinned, Plus, Send } from "lucide-react";
+import { AlertTriangle, Check, Clock3, Layers, MapPin, MapPinned, Plus, Send, Upload } from "lucide-react";
 import { Modal, Tag, Toggle, useStoredState } from "../shared";
 import {
-  STORAGE, catalogoMacros, categoriaPontoLabel, newId, nivelDesvioLabel,
+  MAX_VERTICES_POLIGONO, STORAGE, catalogoMacros, categoriaPontoLabel, newId, nivelDesvioLabel,
   nivelDesvioTone, nomeMacro, nomePonto, pontosIniciais, rotogramasIniciais,
-  type CategoriaPonto, type ConfiguracaoVeiculo, type PontoDeControle, type Rotograma, type Trecho,
+  type CategoriaPonto, type ConfiguracaoVeiculo, type GeometriaArea, type PontoDeControle, type Rotograma, type TipoGeometria, type Trecho,
 } from "../domain";
+import { MapaGeo, type FormaMapa } from "../mapa/MapaGeo";
+import { BarraFerramentas, EditorGeometria } from "../mapa/EditorGeometria";
+import { centroDe, medidaDe, paresSobrepostos } from "../mapa/geometria";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./perfil/VehicleNavigator";
 
 export function usePontos() { return useStoredState<PontoDeControle[]>(STORAGE.pontos, pontosIniciais); }
 
 type AbaGeo = "rotograma" | "pontos";
 
-export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore, busca, onBusca, onLimparBusca, onToast, VehicleNavigator }: {
+/** Um ponto de controle é área: círculo ou polígono. Retângulo entra pela troca de forma. */
+const FORMAS_DE_AREA: TipoGeometria[] = ["circulo", "poligono", "retangulo"];
+
+export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore, busca, onBusca, onLimparBusca, onToast, onRascunho, VehicleNavigator }: {
   pontos: PontoDeControle[];
   setPontos: (next: PontoDeControle[] | ((c: PontoDeControle[]) => PontoDeControle[])) => void;
   configs: ConfiguracaoVeiculo[];
@@ -22,6 +28,8 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
   onBusca: (valor: string) => void;
   onLimparBusca: () => void;
   onToast: (message: string) => void;
+  /** Editar geometria é alteração de rascunho: entra no changelog do veículo afetado. */
+  onRascunho?: (veiculos: string[], descricao: string) => void;
   VehicleNavigator: React.ComponentType<VehicleNavigatorProps>;
 }) {
   const [rotogramas, setRotogramas] = useStoredState<Rotograma[]>(STORAGE.rotogramas, rotogramasIniciais);
@@ -29,6 +37,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
   const [showNew, setShowNew] = useState(false);
   const [pontoId, setPontoId] = useState(pontos[0]?.id ?? "");
   const [trechoId, setTrechoId] = useState("");
+  const [ferramenta, setFerramenta] = useState<TipoGeometria | null>(null);
   const [navegadorRecolhidoLocal, setNavegadorRecolhidoLocal] = useState(false);
   const navegadorRecolhido = arvore?.estado.painelRecolhido ?? navegadorRecolhidoLocal;
   const config = configs.find((c) => c.veiculo === veiculo.atual) ?? configs[0];
@@ -36,16 +45,36 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
   const trechoSelecionado = rotograma?.trechos.find((t) => t.id === trechoId) ?? rotograma?.trechos[rotograma.trechoAtual] ?? rotograma?.trechos[0];
   const idsNoRotograma = useMemo(() => new Set(rotograma?.trechos.flatMap((t) => [t.de, t.para]) ?? []), [rotograma]);
   const pontoSelecionado = pontos.find((p) => p.id === pontoId) ?? pontos[0];
-  const semPrecedencia = pontos.filter((p) => p.sobrepoe.length > 0 && p.precedencia === null && p.sobrepoe.some((id) => pontos.find((outro) => outro.id === id)?.precedencia === null));
 
+  /** Sobreposição real no mapa, não a lista declarada: é ela que trava o embarque. */
+  const sobrepostos = useMemo(() => paresSobrepostos(pontos.filter((p) => p.ativo)), [pontos]);
+  const semPrecedencia = sobrepostos.filter(({ a, b }) => a.precedencia === null && b.precedencia === null);
+
+  /** Quais veículos carregam este ponto na política embarcada. */
+  const veiculosDoPonto = (id: string) => rotogramas.filter((r) => r.trechos.some((t) => t.de === id || t.para === id)).map((r) => r.veiculo);
+
+  const patchPonto = (id: string, descricao: string, fn: (p: PontoDeControle) => PontoDeControle) => {
+    setPontos((atuais) => atuais.map((p) => p.id === id ? { ...fn(p), versao: p.versao + 1 } : p));
+    const afetados = veiculosDoPonto(id);
+    if (afetados.length) onRascunho?.(afetados, `${descricao} · ${nomePonto(id, pontos)}`);
+  };
   const patchTrecho = (id: string, fn: (t: Trecho) => Trecho) => {
     if (!rotograma) return;
     setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, trechos: r.trechos.map((t) => t.id === id ? fn(t) : t) } : r));
+    onRascunho?.([rotograma.veiculo], `Limites do trecho ajustados · ${rotograma.id}`);
   };
   const publicar = () => {
     if (!rotograma) return;
     setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, versao: r.versao + 1 } : r));
     onToast(`Rotograma de ${config.veiculo} publicado como v${rotograma.versao + 1}.`);
+  };
+  const criarPonto = (ponto: PontoDeControle) => {
+    setPontos((atuais) => [...atuais, ponto]);
+    setPontoId(ponto.id);
+    setShowNew(false);
+    setFerramenta(null);
+    setAba("pontos");
+    onToast(`Ponto “${ponto.nome}” criado. Vincule-o a um rotograma para embarcá-lo.`);
   };
 
   return <div className="wsp geo-wsp">
@@ -67,27 +96,85 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
           <button role="tab" aria-selected={aba === "rotograma"} className={aba === "rotograma" ? "ativa" : ""} onClick={() => setAba("rotograma")}>Rotograma</button>
           <button role="tab" aria-selected={aba === "pontos"} className={aba === "pontos" ? "ativa" : ""} onClick={() => setAba("pontos")}>Pontos de controle · {pontos.length}</button>
         </nav>
-        {semPrecedencia.length ? <div className="eq-alerta"><AlertTriangle size={13} /> {semPrecedencia.length} ponto(s) sobrepostos precisam de precedência</div> : null}
+        {semPrecedencia.length ? <div className="eq-alerta">
+          <AlertTriangle size={13} /> {semPrecedencia.length} sobreposição(ões) sem precedência declarada — o equipamento recusa o embarque
+          <button onClick={() => { setAba("pontos"); setPontoId(semPrecedencia[0].a.id); }}>Resolver</button>
+        </div> : null}
         <div className="geo-corpo">
-          {aba === "rotograma" ? <RotogramaWorkspace rotograma={rotograma} pontos={pontos} trecho={trechoSelecionado} onTrecho={setTrechoId} onPatch={patchTrecho} /> : null}
-          {aba === "pontos" ? <PontosWorkspace pontos={pontos} selecionado={pontoSelecionado} noRotograma={idsNoRotograma} onSelecionar={setPontoId} onPatch={(id, fn) => setPontos((atuais) => atuais.map((p) => p.id === id ? fn(p) : p))} /> : null}
+          {aba === "rotograma" ? <RotogramaWorkspace
+            rotograma={rotograma} pontos={pontos} trecho={trechoSelecionado}
+            onTrecho={setTrechoId} onPatch={patchTrecho}
+          /> : null}
+          {aba === "pontos" ? <PontosWorkspace
+            pontos={pontos} selecionado={pontoSelecionado} noRotograma={idsNoRotograma}
+            sobrepostos={sobrepostos} ferramenta={ferramenta} onFerramenta={setFerramenta}
+            onSelecionar={setPontoId} onPatch={patchPonto} onCriar={criarPonto}
+            veiculosDoPonto={veiculosDoPonto}
+          /> : null}
         </div>
       </section>
     </div>
-    {showNew ? <NewPointModal onClose={() => setShowNew(false)} onCreate={(ponto) => { setPontos((atuais) => [...atuais, ponto]); setPontoId(ponto.id); setShowNew(false); setAba("pontos"); onToast(`Ponto “${ponto.nome}” criado.`); }} /> : null}
+    {showNew ? <NewPointModal onClose={() => setShowNew(false)} onCreate={criarPonto} /> : null}
   </div>;
 }
 
-function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: { rotograma?: Rotograma; pontos: PontoDeControle[]; trecho?: Trecho; onTrecho: (id: string) => void; onPatch: (id: string, fn: (t: Trecho) => Trecho) => void }) {
+// ---------------------------------------------------------------- Rotograma
+//
+// Rotograma não se desenha: é plano sobre pontos que já existem. O mapa liga os
+// pontos na ordem dos trechos e mostra qual está em curso — por isso aqui não há
+// barra de ferramentas de desenho, só leitura e os limites por trecho.
+
+function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: {
+  rotograma?: Rotograma;
+  pontos: PontoDeControle[];
+  trecho?: Trecho;
+  onTrecho: (id: string) => void;
+  onPatch: (id: string, fn: (t: Trecho) => Trecho) => void;
+}) {
+  const formas = useMemo<FormaMapa[]>(() => {
+    if (!rotograma) return [];
+    const lista: FormaMapa[] = [];
+    rotograma.trechos.forEach((t, indice) => {
+      const de = pontos.find((p) => p.id === t.de);
+      const para = pontos.find((p) => p.id === t.para);
+      if (!de || !para) return;
+      const estado = indice < rotograma.trechoAtual ? "trecho-feito" : indice === rotograma.trechoAtual ? "trecho-atual" : "trecho";
+      lista.push({
+        id: `${rotograma.id}-${t.id}`,
+        estilo: estado,
+        rotulo: `Trecho ${indice + 1} · ${t.distanciaKm} km · ${t.duracaoMin} min · máx ${t.limites.velocidadeKmh} km/h`,
+        geometria: { tipo: "linha", corredorM: 0, vertices: [centroDe(de.geometria), centroDe(para.geometria)] },
+        aoClicar: () => onTrecho(t.id),
+      });
+    });
+    const usados = new Set(rotograma.trechos.flatMap((t) => [t.de, t.para]));
+    for (const id of Array.from(usados)) {
+      const ponto = pontos.find((p) => p.id === id);
+      if (!ponto) continue;
+      lista.push({
+        id: ponto.id,
+        geometria: ponto.geometria,
+        estilo: !ponto.ativo ? "ponto-inativo" : ponto.fixo ? "ponto-fixo" : "ponto",
+        rotulo: `${ponto.nome} · ${medidaDe(ponto.geometria)}${ponto.fixo ? " · ponto fixo" : ""}`,
+      });
+    }
+    return lista;
+  }, [rotograma, pontos, onTrecho]);
+
   if (!rotograma) return <div className="geo-empty"><MapPinned size={28} /><strong>Nenhum rotograma para este veículo</strong><span>Crie uma jornada a partir dos pontos de controle cadastrados.</span><button className="geo-btn primario"><Plus size={13} /> Criar rotograma</button></div>;
+
+  const totalKm = rotograma.trechos.reduce((total, t) => total + t.distanciaKm, 0);
   return <div className="geo-rotograma-grid">
     <div className="geo-mapa-card">
-      <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{rotograma.trechos.reduce((total, t) => total + t.distanciaKm, 0)} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
-      <MapaOperacional pontos={pontos} rotograma={rotograma} />
-      <div className="geo-legenda"><span><i className="feito" /> concluído</span><span><i className="atual" /> em curso</span><span><i /> planejado</span></div>
+      <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{totalKm} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
+      <MapaGeo formas={formas} ajuste={`rg-${rotograma.id}`} rotulo={`Mapa do rotograma de ${rotograma.veiculo}`} />
+      <div className="geo-legenda">
+        <span><i className="feito" /> concluído</span><span><i className="atual" /> em curso</span><span><i /> planejado</span>
+        <span className="geo-legenda-nota">adiantar também é desvio</span>
+      </div>
     </div>
     <aside className="geo-itinerario">
-      <div className="geo-card-head"><div><strong>Sequência do rotograma</strong><span>Clique em um trecho para configurar</span></div></div>
+      <div className="geo-card-head"><div><strong>Sequência do rotograma</strong><span>Clique num trecho, aqui ou no mapa</span></div></div>
       <div className="geo-trechos">{rotograma.trechos.map((t, index) => {
         const ativo = trecho?.id === t.id;
         const estado = index < rotograma.trechoAtual ? "concluido" : index === rotograma.trechoAtual ? "em-curso" : "planejado";
@@ -105,26 +192,128 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: { 
   </div>;
 }
 
-function PontosWorkspace({ pontos, selecionado, noRotograma, onSelecionar, onPatch }: { pontos: PontoDeControle[]; selecionado?: PontoDeControle; noRotograma: Set<string>; onSelecionar: (id: string) => void; onPatch: (id: string, fn: (p: PontoDeControle) => PontoDeControle) => void }) {
+// ----------------------------------------------------------------- Pontos
+
+function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferramenta, onFerramenta, onSelecionar, onPatch, onCriar, veiculosDoPonto }: {
+  pontos: PontoDeControle[];
+  selecionado?: PontoDeControle;
+  noRotograma: Set<string>;
+  sobrepostos: ReturnType<typeof paresSobrepostos<PontoDeControle>>;
+  ferramenta: TipoGeometria | null;
+  onFerramenta: (t: TipoGeometria | null) => void;
+  onSelecionar: (id: string) => void;
+  onPatch: (id: string, descricao: string, fn: (p: PontoDeControle) => PontoDeControle) => void;
+  onCriar: (p: PontoDeControle) => void;
+  veiculosDoPonto: (id: string) => string[];
+}) {
+  const conflitos = selecionado ? sobrepostos.filter(({ a, b }) => a.id === selecionado.id || b.id === selecionado.id) : [];
+
+  const formas = useMemo<FormaMapa[]>(() => {
+    const lista: FormaMapa[] = pontos.map((p) => ({
+      id: p.id,
+      geometria: p.geometria,
+      estilo: selecionado?.id === p.id ? "selecionado" : !p.ativo ? "ponto-inativo" : p.fixo ? "ponto-fixo" : "ponto",
+      rotulo: `${p.nome} · ${medidaDe(p.geometria)}${p.ativo ? "" : " · inativo"}${p.fixo ? " · fixo" : ""}`,
+      aoClicar: () => onSelecionar(p.id),
+    }));
+    // A região comum é leitura emergente: aparece, mas não existe ferramenta de desenhá-la.
+    for (const { a, b, regiao } of sobrepostos) {
+      if (regiao.length < 3) continue;
+      lista.push({
+        id: `ac-${a.id}-${b.id}`,
+        estilo: "sobreposicao",
+        geometria: { tipo: "poligono", vertices: regiao },
+        rotulo: `Área de controle · ${a.nome} ∩ ${b.nome}${a.precedencia === null && b.precedencia === null ? " · sem precedência" : ""}`,
+      });
+    }
+    return lista;
+  }, [pontos, selecionado?.id, sobrepostos, onSelecionar]);
+
+  const afetados = selecionado ? veiculosDoPonto(selecionado.id) : [];
+
   return <div className="geo-pontos-grid">
-    <div className="geo-lista-pontos"><div className="geo-card-head"><div><strong>Catálogo de pontos</strong><span>Áreas reutilizáveis nos rotogramas</span></div></div>{pontos.map((p) => <button key={p.id} className={`geo-ponto-item ${selecionado?.id === p.id ? "selecionado" : ""}`} onClick={() => onSelecionar(p.id)}><MapPin size={14} /><span><strong>{p.nome}</strong><small>{p.local} · raio {p.raioM} m</small></span>{noRotograma.has(p.id) ? <Tag tone="blue">na viagem</Tag> : null}</button>)}</div>
-    <div className="geo-mapa-card"><div className="geo-card-head"><div><strong>Pontos no mapa</strong><span>Selecione um ponto para editar</span></div></div><MapaOperacional pontos={pontos} /></div>
-    {selecionado ? <aside className="geo-inspetor"><div className="geo-card-head"><div><strong>{selecionado.nome}</strong><span>{selecionado.id} · v{selecionado.versao}</span></div><Toggle checked={selecionado.ativo} onChange={(ativo) => onPatch(selecionado.id, (p) => ({ ...p, ativo }))} /></div>
-      <label>Categoria<select value={selecionado.categoria} onChange={(e) => onPatch(selecionado.id, (p) => ({ ...p, categoria: e.target.value as CategoriaPonto }))}>{(Object.keys(categoriaPontoLabel) as CategoriaPonto[]).map((c) => <option key={c} value={c}>{categoriaPontoLabel[c]}</option>)}</select></label>
-      <label>Macro ao entrar<select value={selecionado.politica.macro} onChange={(e) => onPatch(selecionado.id, (p) => ({ ...p, politica: { ...p.politica, macro: e.target.value } }))}>{catalogoMacros.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></label>
-      <div className="geo-campos"><CampoNumero label="Raio" unidade="m" valor={selecionado.raioM} onChange={(raioM) => onPatch(selecionado.id, (p) => ({ ...p, raioM }))} /><CampoNumero label="Permanência máx." unidade="min" valor={selecionado.politica.permanenciaMaxMin} onChange={(permanenciaMaxMin) => onPatch(selecionado.id, (p) => ({ ...p, politica: { ...p.politica, permanenciaMaxMin } }))} /></div>
+    <div className="geo-lista-pontos">
+      <div className="geo-card-head"><div><strong>Catálogo de pontos</strong><span>Áreas reutilizáveis nos rotogramas</span></div></div>
+      {pontos.map((p) => <button key={p.id} className={`geo-ponto-item ${selecionado?.id === p.id ? "selecionado" : ""} ${p.ativo ? "" : "inativo"}`} onClick={() => onSelecionar(p.id)}>
+        <MapPin size={14} /><span><strong>{p.nome}</strong><small>{p.local} · {medidaDe(p.geometria)}</small></span>
+        {noRotograma.has(p.id) ? <Tag tone="blue">na viagem</Tag> : null}
+      </button>)}
+    </div>
+
+    <div className="geo-mapa-card">
+      <div className="geo-card-head"><div><strong>Pontos no mapa</strong><span>Arraste as alças para ajustar a área</span></div></div>
+      <BarraFerramentas
+        permitidos={FORMAS_DE_AREA}
+        ativo={ferramenta}
+        rotulo="Desenhar novo ponto de controle"
+        onEscolher={onFerramenta}
+        onCancelar={() => onFerramenta(null)}
+      />
+      <MapaGeo
+        formas={formas}
+        rotulo="Mapa dos pontos de controle"
+        ajuste={`pt-${selecionado?.id ?? ""}-${pontos.length}`}
+        editando={selecionado && !ferramenta ? {
+          geometria: selecionado.geometria,
+          onChange: (geometria) => onPatch(selecionado.id, "Área ajustada no mapa", (p) => ({ ...p, geometria: geometria as GeometriaArea })),
+        } : null}
+        desenhando={ferramenta ? {
+          tipo: ferramenta,
+          onCancelar: () => onFerramenta(null),
+          onConcluir: (geometria) => onCriar(pontoNovo(geometria as GeometriaArea)),
+        } : null}
+      />
+      <div className="geo-legenda">
+        <span><i className="ponto" /> ativo</span><span><i className="fixo" /> fixo</span>
+        <span><i className="inativo" /> inativo</span><span><i className="conflito" /> área de controle</span>
+      </div>
+    </div>
+
+    {selecionado ? <aside className="geo-inspetor">
+      <div className="geo-card-head"><div><strong>{selecionado.nome}</strong><span>{selecionado.id} · v{selecionado.versao}</span></div><Toggle checked={selecionado.ativo} onChange={(ativo) => onPatch(selecionado.id, ativo ? "Ponto ativado" : "Ponto inativado", (p) => ({ ...p, ativo }))} /></div>
+
+      {conflitos.length ? <div className="geo-conflito">
+        <AlertTriangle size={14} />
+        <div>
+          <strong>Sobrepõe {conflitos.length} outra(s) área(s)</strong>
+          {conflitos.map(({ a, b }) => {
+            const outro = a.id === selecionado.id ? b : a;
+            const resolvido = selecionado.precedencia !== null || outro.precedencia !== null;
+            return <p key={outro.id}>{outro.nome} — {resolvido ? "precedência declarada" : "sem regra de desempate"}</p>;
+          })}
+          <label>Precedência deste ponto
+            <select value={selecionado.precedencia ?? ""} onChange={(e) => onPatch(selecionado.id, "Precedência declarada", (p) => ({ ...p, precedencia: e.target.value ? Number(e.target.value) : null }))}>
+              <option value="">Não declarada</option>
+              <option value="1">1 · prevalece</option>
+              <option value="2">2 · cede</option>
+            </select>
+          </label>
+          <span className="geo-conflito-nota"><Layers size={11} /> A região comum é leitura do mapa, não um cadastro.</span>
+        </div>
+      </div> : null}
+
+      <EditorGeometria
+        geometria={selecionado.geometria}
+        permitirTroca={FORMAS_DE_AREA}
+        onChange={(geometria) => onPatch(selecionado.id, "Geometria editada", (p) => ({ ...p, geometria: geometria as GeometriaArea }))}
+      />
+
+      <label>Categoria<select value={selecionado.categoria} onChange={(e) => onPatch(selecionado.id, "Categoria alterada", (p) => ({ ...p, categoria: e.target.value as CategoriaPonto }))}>{(Object.keys(categoriaPontoLabel) as CategoriaPonto[]).map((c) => <option key={c} value={c}>{categoriaPontoLabel[c]}</option>)}</select></label>
+      <label>Macro ao entrar<select value={selecionado.politica.macro} onChange={(e) => onPatch(selecionado.id, "Macro de entrada alterada", (p) => ({ ...p, politica: { ...p.politica, macro: e.target.value } }))}>{catalogoMacros.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></label>
+      <div className="geo-campos"><CampoNumero label="Permanência máx." unidade="min" valor={selecionado.politica.permanenciaMaxMin} onChange={(permanenciaMaxMin) => onPatch(selecionado.id, "Permanência alterada", (p) => ({ ...p, politica: { ...p.politica, permanenciaMaxMin } }))} /><CampoNumero label="Permanência mín." unidade="min" valor={selecionado.politica.permanenciaMinMin} onChange={(permanenciaMinMin) => onPatch(selecionado.id, "Permanência alterada", (p) => ({ ...p, politica: { ...p.politica, permanenciaMinMin } }))} /></div>
       <div className="geo-resumo-regra"><Clock3 size={13} /><span>Ao entrar, registra <strong>{nomeMacro(selecionado.politica.macro)}</strong>. Janela {selecionado.politica.janela}.</span></div>
-      {selecionado.sobrepoe.length ? <label>Precedência<select value={selecionado.precedencia ?? ""} onChange={(e) => onPatch(selecionado.id, (p) => ({ ...p, precedencia: e.target.value ? Number(e.target.value) : null }))}><option value="">Definir</option><option value="1">1 · prevalece</option><option value="2">2 · cede</option></select></label> : null}
-      <label className="geo-toggle-linha"><span><strong>Ponto fixo</strong><small>Permanece após limpar a viagem</small></span><Toggle checked={selecionado.fixo} onChange={(fixo) => onPatch(selecionado.id, (p) => ({ ...p, fixo }))} /></label>
+      <label className="geo-toggle-linha"><span><strong>Ponto fixo</strong><small>Sobrevive à limpeza da política embarcada</small></span><Toggle checked={selecionado.fixo} onChange={(fixo) => onPatch(selecionado.id, fixo ? "Marcado como fixo" : "Deixou de ser fixo", (p) => ({ ...p, fixo }))} /></label>
+      {afetados.length ? <div className="geo-afetados"><Upload size={12} /><span>Alterar esta área vira rascunho em <strong>{afetados.join(", ")}</strong>. Embarque pela política do veículo.</span></div> : null}
     </aside> : null}
   </div>;
 }
 
-function MapaOperacional({ pontos, rotograma }: { pontos: PontoDeControle[]; rotograma?: Rotograma }) {
-  const ids = rotograma ? [rotograma.trechos[0]?.de, ...rotograma.trechos.map((t) => t.para)].filter(Boolean) : pontos.slice(0, 6).map((p) => p.id);
-  const posicoes = [[12, 72], [29, 50], [46, 63], [62, 35], [78, 45], [90, 20]];
-  const caminho = posicoes.slice(0, ids.length).map(([x, y]) => `${x},${y}`).join(" ");
-  return <div className="geo-mapa"><svg viewBox="0 0 100 85" preserveAspectRatio="none" aria-label="Mapa do rotograma"><path className="geo-rio" d="M-5 78 C22 54, 34 88, 58 62 S82 28, 106 37" /><g className="geo-estradas"><path d="M0 18 L100 74" /><path d="M5 65 L92 12" /><path d="M38 0 L57 85" /></g>{rotograma ? <polyline className="geo-rota-sombra" points={caminho} /> : null}{rotograma ? <polyline className="geo-rota" points={caminho} /> : null}{ids.map((id, i) => { const [x, y] = posicoes[i] ?? posicoes[posicoes.length - 1]; const p = pontos.find((item) => item.id === id); return <g key={`${id}-${i}`} className="geo-map-marker" transform={`translate(${x} ${y})`}><circle r={rotograma?.trechoAtual === i ? 3.7 : 3} /><text y="-5">{i + 1}</text><title>{p?.nome ?? id}</title></g>; })}</svg><span className="geo-cidade c1">Campinas</span><span className="geo-cidade c2">Seropédica</span><span className="geo-cidade c3">Itaguaí</span></div>;
+function pontoNovo(geometria: GeometriaArea): PontoDeControle {
+  return {
+    id: newId("PC"), nome: "Novo ponto de controle", categoria: "cliente",
+    politica: { macro: catalogoMacros[0]?.id ?? "", permanenciaMaxMin: 60, permanenciaMinMin: 0, janela: "24h" },
+    fixo: false, precedencia: null, ativo: true, geometria, local: "Definir", sobrepoe: [], versao: 1,
+  };
 }
 
 function CampoNumero({ label, unidade, valor, onChange }: { label: string; unidade: string; valor: number; onChange: (valor: number) => void }) {
@@ -137,12 +326,21 @@ function NewPointModal({ onClose, onCreate }: { onClose: () => void; onCreate: (
   const [categoria, setCategoria] = useState<CategoriaPonto>("cliente");
   const [macro, setMacro] = useState(catalogoMacros[0]?.id ?? "");
   const [raio, setRaio] = useState("200");
+  const [lat, setLat] = useState("-22.7856");
+  const [lng, setLng] = useState("-43.3117");
   const [fixo, setFixo] = useState(false);
-  return <Modal title="Novo ponto de controle" description="Cadastre a área uma vez e reutilize-a nos rotogramas dos veículos." onClose={onClose}>
+  return <Modal title="Novo ponto de controle" description="Ponto de controle é área, não alfinete. Informe o centro e o raio, ou desenhe direto no mapa pela barra de ferramentas." onClose={onClose}>
     <div className="form-field"><label>Nome</label><input value={nome} onChange={(e) => setNome(e.target.value)} /></div>
     <div className="form-field"><label>Localização</label><input value={local} onChange={(e) => setLocal(e.target.value)} /></div>
     <div className="form-row"><div className="form-field"><label>Categoria</label><select value={categoria} onChange={(e) => setCategoria(e.target.value as CategoriaPonto)}>{(Object.keys(categoriaPontoLabel) as CategoriaPonto[]).map((c) => <option key={c} value={c}>{categoriaPontoLabel[c]}</option>)}</select></div><div className="form-field"><label>Macro ao entrar</label><select value={macro} onChange={(e) => setMacro(e.target.value)}>{catalogoMacros.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></div></div>
-    <div className="form-row"><div className="form-field"><label>Raio (m)</label><input type="number" value={raio} onChange={(e) => setRaio(e.target.value)} /></div><div className="form-field"><label>Ponto fixo</label><Toggle checked={fixo} onChange={setFixo} label={fixo ? "Fixo" : "Temporário"} /></div></div>
-    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" disabled={!nome.trim() || !macro} onClick={() => onCreate({ id: newId("PC"), nome: nome.trim(), categoria, politica: { macro, permanenciaMaxMin: 60, permanenciaMinMin: 0, janela: "24h" }, fixo, precedencia: null, ativo: true, raioM: Number(raio), local: local.trim(), sobrepoe: [], versao: 1 })}><Check size={13} /> Salvar ponto</button></div>
+    <div className="form-row"><div className="form-field"><label>Latitude</label><input type="number" step="0.0005" value={lat} onChange={(e) => setLat(e.target.value)} /></div><div className="form-field"><label>Longitude</label><input type="number" step="0.0005" value={lng} onChange={(e) => setLng(e.target.value)} /></div></div>
+    <div className="form-row"><div className="form-field"><label>Raio (m)</label><input type="number" value={raio} onChange={(e) => setRaio(e.target.value)} /><div className="form-hint">Polígono e retângulo ficam disponíveis depois, no inspetor. Máximo estimado de {MAX_VERTICES_POLIGONO} vértices.</div></div><div className="form-field"><label>Ponto fixo</label><Toggle checked={fixo} onChange={setFixo} label={fixo ? "Sobrevive à limpeza" : "Removido na limpeza"} /></div></div>
+    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" disabled={!nome.trim() || !macro} onClick={() => onCreate({
+      id: newId("PC"), nome: nome.trim(), categoria,
+      politica: { macro, permanenciaMaxMin: 60, permanenciaMinMin: 0, janela: "24h" },
+      fixo, precedencia: null, ativo: true,
+      geometria: { tipo: "circulo", centro: { lat: Number(lat), lng: Number(lng) }, raioM: Math.max(25, Number(raio)) },
+      local: local.trim(), sobrepoe: [], versao: 1,
+    })}><Check size={13} /> Salvar ponto</button></div>
   </Modal>;
 }

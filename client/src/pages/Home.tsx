@@ -62,7 +62,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
-import { equipamentoDe } from "./risk/domain";
+import { equipamentoDe, newId } from "./risk/domain";
 import { ProfilesView, useConfiguracoes } from "./risk/views/ProfilesView";
 import { VehicleNavigator, type ControleArvoreVeiculos, type EstadoArvoreVeiculos } from "./risk/views/perfil/VehicleNavigator";
 import { EquipmentConfigView } from "./risk/views/equipamento/EquipmentConfigView";
@@ -338,6 +338,20 @@ function MainApp() {
   const chooseView = (view: ViewKey) => { setActiveView(view); setSearch(""); setSidebarOpen(false); window.scrollTo({ top: 0, left: 0 }); };
   const openRisk = (risk: Risk) => setSelectedRisk(risk);
   const openCommand = (vehicle: string) => { setSelectedRisk(null); setCommandVehicle(vehicle); };
+  /**
+   * Geometria editada nas telas de geografia é alteração de rascunho.
+   *
+   * Cerca, ponto e corredor viajam dentro da política embarcada do veículo, então
+   * mexer neles entra no mesmo changelog que o perfil e o mapa de I/O — e sai
+   * pelo mesmo "Revisar e embarcar", em vez de um salvamento paralelo que o
+   * operador não veria antes do envio.
+   */
+  const registrarRascunho = (veiculos: string[], descricao: string) => {
+    if (!veiculos.length) return;
+    setConfigs((atuais) => atuais.map((c) => veiculos.includes(c.veiculo)
+      ? { ...c, mudancas: [...c.mudancas, { id: newId("MD"), descricao, em: new Date().toISOString(), por: "Larissa Martins" }] }
+      : c));
+  };
   const entityView = activeView as "fleet" | "drivers" | "training" | "traffic" | "settings";
   const body = activeView === "dashboard" ? <Dashboard search={search} onSelectRisk={openRisk} onToast={notify} onNavigate={chooseView} />
     : activeView === "risks" ? <RisksView risks={risks} search={search} onSelectRisk={openRisk} onCommand={openCommand} />
@@ -347,9 +361,9 @@ function MainApp() {
     : activeView === "reports" ? <ReportsView onToast={notify} />
     : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
     : activeView === "equipment" ? <EquipmentConfigView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
-    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
-    : activeView === "fences" ? <FencesView configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
-    : activeView === "routes" ? <RoutesView onToast={notify} onGoRotograma={() => chooseView("controlpoints")} />
+    : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} onRascunho={registrarRascunho} VehicleNavigator={VehicleNavigator} />
+    : activeView === "fences" ? <FencesView configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} onRascunho={registrarRascunho} VehicleNavigator={VehicleNavigator} />
+    : activeView === "routes" ? <RoutesView onToast={notify} onGoRotograma={() => chooseView("controlpoints")} onRascunho={registrarRascunho} />
     : activeView === "provisioning" ? <ProvisioningView pontos={pontos} onToast={notify} />
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;

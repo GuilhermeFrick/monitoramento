@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
+/* O Leaflet posiciona tiles por CSS; o estilo precisa existir antes do mapa montar. */
+@import "leaflet/dist/leaflet.css";
 
 :root {
   --background: #f6f8fb;
@@ -448,7 +450,6 @@ tbody tr:hover { background: #fbfdfd; }
 .map-zone { position: absolute; border-radius: 50%; border: 2px dashed; opacity: .55; }
 .map-zone.red { border-color: #d2635b; background: rgba(210,99,91,.12); } .map-zone.amber { border-color: #e0a04e; background: rgba(224,160,78,.12); } .map-zone.teal { border-color: #44ad98; background: rgba(68,173,152,.12); }
 .zone-a { width: 90px; height: 90px; left: 22%; top: 18%; } .zone-b { width: 70px; height: 70px; left: 56%; top: 34%; } .zone-c { width: 110px; height: 110px; left: 60%; top: 58%; } .zone-d { width: 60px; height: 60px; left: 30%; top: 62%; }
-.map-corridor { position: absolute; left: 12%; top: 36%; width: 70%; height: 22px; border-radius: 999px; background: rgba(68,173,152,.18); border: 1px dashed #44ad98; transform: rotate(-12deg); }
 .accept-summary { display: inline-flex; gap: 4px; }
 .accept-summary span { min-width: 20px; text-align: center; border-radius: 6px; padding: 2px 5px; font-size: 9px; font-weight: 800; }
 .accept-summary .ok { color: #258776; background: #eaf8f4; } .accept-summary .pend { color: #bb7a25; background: #fff7e8; } .accept-summary .rej { color: #ce5c55; background: #fff0ee; }
@@ -1052,17 +1053,6 @@ tbody tr:hover { background: #fbfdfd; }
 .geo-card-head strong { display: block; overflow: hidden; color: #2c4054; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .geo-card-head span { display: block; overflow: hidden; margin-top: 2px; color: #8a97a4; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
 .geo-mapa-card { display: flex; flex-direction: column; }
-.geo-mapa { position: relative; flex: 1; min-height: 310px; overflow: hidden; background: linear-gradient(155deg, #eef3f5, #f9faf8 58%, #eaf1ed); }
-.geo-mapa::before { position: absolute; inset: 0; content: ""; opacity: .38; background-image: linear-gradient(#d8e1e3 1px, transparent 1px), linear-gradient(90deg, #d8e1e3 1px, transparent 1px); background-size: 38px 38px; }
-.geo-mapa svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.geo-rio { fill: none; stroke: #b8dce8; stroke-width: 5; opacity: .75; }
-.geo-estradas path { fill: none; stroke: #d1d9dc; stroke-width: .8; stroke-dasharray: 1.5 1; }
-.geo-rota-sombra { fill: none; stroke: rgba(20,71,150,.15); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-.geo-rota { fill: none; stroke: #144796; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.geo-map-marker circle { fill: #fff; stroke: #144796; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
-.geo-map-marker text { fill: #144796; font-size: 4px; font-weight: 800; text-anchor: middle; }
-.geo-cidade { position: absolute; color: #85939f; font-size: 9px; font-weight: 700; }
-.geo-cidade.c1 { left: 13%; top: 20%; }.geo-cidade.c2 { left: 55%; top: 64%; }.geo-cidade.c3 { right: 8%; top: 28%; }
 .geo-legenda { flex: 0 0 auto; min-height: 34px; display: flex; align-items: center; gap: 16px; padding: 6px 10px; border-top: 1px solid #edf1f4; color: #80909d; font-size: 9px; }
 .geo-legenda span { display: inline-flex; align-items: center; gap: 5px; }
 .geo-legenda i { width: 8px; height: 8px; border: 1.5px solid #aab5bf; border-radius: 50%; background: #fff; }
@@ -1098,10 +1088,8 @@ tbody tr:hover { background: #fbfdfd; }
 .cerca-item { grid-template-columns: 27px minmax(0,1fr) 8px; }
 .cerca-item > i { width: 7px; height: 7px; border-radius: 50%; background: #c4cdd5; }.cerca-item > i.ativo { background: #2eaa8c; }
 .cerca-icone { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 6px; background: #eef2ff; color: #144796; }.cerca-icone.cerca-restrita { background: #fdeceb; color: #b23b35; }.cerca-icone.cerca-velocidade { background: #fff4df; color: #a36b16; }.cerca-icone.cerca-operacional { background: #e9f6f2; color: #177865; }
-.cerca-mapa { min-height: 360px; }.cerca-trajeto { fill: none; stroke: #758799; stroke-width: 1; stroke-dasharray: 2 1; }.cerca-geometria { fill: rgba(88,128,251,.15); stroke: #5880fb; stroke-width: 1.2; vector-effect: non-scaling-stroke; }.cerca-geometria.corredor { fill: none; stroke: rgba(88,128,251,.35); stroke-width: 10; stroke-linecap: round; }.geo-legenda i.cerca-area { border-color: #5880fb; border-radius: 2px; background: rgba(88,128,251,.25); }.geo-legenda i.cerca-tolerancia { border-color: #9eb4fb; border-style: dashed; }.geo-legenda i.rota { height: 2px; border: 0; border-radius: 0; background: #758799; }
 .cerca-vinculo { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 7px; padding: 9px; border: 1px dashed #d7e0e6; border-radius: 8px; background: #fafbfc; color: #7a8996; }.cerca-vinculo.vinculado { border-color: #bfd9f4; background: #f2f7fd; color: #144796; }.cerca-vinculo > span { min-width: 0; }.cerca-vinculo strong, .cerca-vinculo small { display: block; }.cerca-vinculo strong { font-size: 10px; }.cerca-vinculo small { margin-top: 2px; color: #8594a1; font-size: 8.5px; }.cerca-vinculo button { grid-column: 1 / -1; min-height: 27px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #cfd9e2; border-radius: 6px; background: #fff; color: #144796; font-size: 9.5px; font-weight: 750; cursor: pointer; }
 .cerca-vigencia { background: #f7f8fa; }.cerca-vigencia strong, .cerca-vigencia small { display: block; }.cerca-vigencia small { margin-top: 2px; color: #8996a2; }
-.cerca-desenho-preview { min-height: 90px; display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 10px; border: 1px dashed #b9c9d6; border-radius: 9px; background: #f6f9fb; color: #5880fb; }.cerca-desenho-preview span { text-align: center; }.cerca-desenho-preview strong, .cerca-desenho-preview small { display: block; }.cerca-desenho-preview strong { color: #405467; font-size: 11px; }.cerca-desenho-preview small { margin-top: 3px; color: #8795a2; font-size: 9px; }
 
 @media (max-width: 1120px) {
   .geo-pontos-grid, .cerca-grid { grid-template-columns: 220px minmax(300px,1fr) 250px; }
@@ -1117,3 +1105,92 @@ tbody tr:hover { background: #fbfdfd; }
   .geo-btn { width: 30px; padding: 0; font-size: 0; }
   .geo-pontos-grid, .cerca-grid { grid-template-columns: 200px minmax(330px,1fr); }
 }
+
+/* ------------------------------ Mapa real (Leaflet) ------------------------------
+   O mapa é fundo de trabalho, não ilustração: base neutra, e a cor forte reservada
+   para a geometria — cerca, ponto, corredor e sobreposição. */
+.mapa-geo { position: relative; flex: 1; min-height: 260px; border-radius: 10px; overflow: hidden; border: 1px solid #e6edf1; background: #eef2f5; }
+.mapa-tela { position: absolute; inset: 0; }
+.mapa-carregando { position: absolute; inset: 0; display: grid; place-items: center; background: #eef2f5; }
+.mapa-carregando span { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #cfd9e0; border-top-color: #0f7c75; animation: girar .9s linear infinite; }
+.mapa-medida { position: absolute; left: 10px; top: 10px; z-index: 620; background: #183b3a; color: #fff; font-size: 10px; font-weight: 800; padding: 5px 9px; border-radius: 7px; box-shadow: 0 3px 10px rgba(21,54,57,.22); font-family: 'DM Mono', ui-monospace, monospace; pointer-events: none; }
+.mapa-dica { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 620; background: rgba(255,255,255,.96); color: #33485d; font-size: 10px; padding: 6px 11px; border-radius: 999px; border: 1px solid #dbe4e9; box-shadow: 0 3px 10px rgba(21,54,57,.12); pointer-events: none; white-space: nowrap; }
+.leaflet-container { font: inherit; background: #eef2f5; }
+.leaflet-container.desenhando { cursor: crosshair; }
+.leaflet-container.desenhando .leaflet-interactive { cursor: crosshair; }
+.mapa-rotulo.leaflet-tooltip { background: #183b3a; color: #fff; border: 0; box-shadow: 0 3px 10px rgba(21,54,57,.2); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+.mapa-rotulo.leaflet-tooltip::before { border-top-color: #183b3a; }
+.leaflet-control-zoom a { color: #33485d; border-radius: 6px !important; }
+.leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,.82) !important; }
+
+/* Alças: cheia move, vazada insere, losango muda o raio. */
+.mapa-alca { background: #fff; border: 2px solid #0b5f59; border-radius: 50%; box-shadow: 0 1px 4px rgba(21,54,57,.3); cursor: grab; }
+.mapa-alca:active { cursor: grabbing; }
+/* Vazada e menor: lê como "aqui cabe um vértice novo" sem competir com as cheias. */
+.mapa-alca.meio { border-width: 1.5px; border-color: #7cc6bc; background: rgba(255,255,255,.85); opacity: .9; width: 10px !important; height: 10px !important; margin: 2px; }
+.mapa-alca.raio { border-color: #bb7a25; background: #fff7e8; border-radius: 3px; transform: rotate(45deg); cursor: ew-resize; }
+
+/* Barra de desenho: só as quatro formas que a geocerca do equipamento aceita. */
+.mapa-ferramentas { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; padding: 2px 13px 9px; }
+.mapa-ferramentas-titulo { font-size: 9px; font-weight: 800; color: #8b98a6; text-transform: uppercase; letter-spacing: .06em; margin-right: 3px; }
+.mapa-ferramentas button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #dbe4e9; background: #fff; color: #4d6075; border-radius: 7px; padding: 5px 9px; font-size: 10px; font-weight: 700; cursor: pointer; transition: border-color .15s, background .15s, color .15s; }
+.mapa-ferramentas button:hover { border-color: #b6d6d1; color: #0f716b; }
+.mapa-ferramentas button.ativa { border-color: #0f7c75; background: #eef7f5; color: #0b5f59; }
+.mapa-ferramentas button.cancelar { border-color: #f0cfcc; color: #b1544d; background: #fff7f6; margin-left: auto; }
+.mapa-avisos { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.mapa-avisos p { margin: 0; font-size: 9.5px; line-height: 1.45; padding: 6px 9px; border-radius: 7px; }
+.mapa-avisos p.erro { color: #a4423c; background: #fff0ee; border: 1px solid #f5cfcb; }
+.mapa-avisos p.aviso { color: #8a5b16; background: #fff7e8; border: 1px solid #f4e2bf; }
+
+/* Editor por formulário — o caminho equivalente ao mapa, por teclado. */
+.geo-editor-geometria { border-top: 1px solid #eef2f4; margin-top: 12px; padding-top: 12px; display: flex; flex-direction: column; gap: 9px; }
+.geo-troca-forma { display: flex; gap: 4px; flex-wrap: wrap; }
+.geo-troca-forma button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #dbe4e9; background: #fff; color: #5a6b7d; border-radius: 6px; padding: 4px 8px; font-size: 9.5px; font-weight: 700; cursor: pointer; }
+.geo-troca-forma button.ativa { border-color: #0f7c75; background: #eef7f5; color: #0b5f59; }
+.geo-campos.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.geo-numero.somente-leitura { display: flex; align-items: center; padding: 7px 9px; font-size: 10.5px; color: #5a6b7d; background: #f5f8f9; border: 1px solid #e6edf1; border-radius: 7px; font-family: 'DM Mono', ui-monospace, monospace; }
+.geo-vertices { border: 1px solid #e6edf1; border-radius: 8px; padding: 8px; background: #fbfdfd; }
+.geo-vertices-topo { display: flex; justify-content: space-between; gap: 8px; font-size: 9.5px; color: #7b8a99; margin-bottom: 6px; }
+.geo-vertices-topo .acima { color: #8a5b16; font-weight: 700; }
+.geo-vertices ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 168px; overflow-y: auto; }
+.geo-vertices li { display: grid; grid-template-columns: 18px 1fr 1fr auto auto; gap: 4px; align-items: center; }
+.geo-vertice-num { font-size: 9px; font-weight: 800; color: #8b98a6; text-align: center; }
+.geo-vertices input { width: 100%; border: 1px solid #e2e9ed; border-radius: 5px; padding: 4px 5px; font-size: 9.5px; font-family: 'DM Mono', ui-monospace, monospace; color: #33485d; }
+.geo-vertices li > button { border: 1px solid #e2e9ed; background: #fff; color: #6b7a8a; border-radius: 5px; width: 20px; height: 20px; display: grid; place-items: center; cursor: pointer; }
+.geo-vertices li > button:hover:not(:disabled) { border-color: #b6d6d1; color: #0f716b; }
+.geo-vertices li > button:disabled { opacity: .35; cursor: not-allowed; }
+.geo-dica-mapa { margin: 7px 0 0; font-size: 9px; color: #8b98a6; line-height: 1.4; }
+.geo-dica-mapa kbd { background: #eef2f5; border: 1px solid #dbe4e9; border-radius: 4px; padding: 0 3px; font-size: 8.5px; font-family: inherit; }
+
+/* Sobreposição: o problema aparece onde o operador o vê, com a saída ao lado. */
+.geo-conflito { display: grid; grid-template-columns: auto 1fr; gap: 9px; padding: 10px 11px; border-radius: 9px; background: #fff0ee; border: 1px solid #f5cfcb; color: #a4423c; }
+.geo-conflito strong { display: block; font-size: 10.5px; margin-bottom: 4px; }
+.geo-conflito p { margin: 0 0 3px; font-size: 9.5px; line-height: 1.4; }
+.geo-conflito label { display: block; margin-top: 7px; font-size: 9px; font-weight: 800; color: #8a4a45; text-transform: uppercase; letter-spacing: .05em; }
+.geo-conflito select { width: 100%; margin-top: 4px; border: 1px solid #edc6c2; background: #fff; border-radius: 6px; padding: 6px 8px; font-size: 10.5px; color: #33485d; }
+.geo-conflito-nota { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; font-size: 9px; color: #a4423c; opacity: .85; }
+.geo-nota-inativa { margin: 0; font-size: 9.5px; color: #7b8a99; line-height: 1.45; background: #f5f8f9; border-radius: 7px; padding: 7px 9px; }
+.geo-afetados { display: flex; align-items: flex-start; gap: 7px; font-size: 9.5px; color: #8a5b16; background: #fff7e8; border: 1px solid #f4e2bf; border-radius: 8px; padding: 8px 10px; line-height: 1.45; }
+.geo-legenda-nota { margin-left: auto; font-size: 9px; color: #8b98a6; font-style: italic; }
+.geo-btn.perigo { border-color: #f0cfcc; color: #b1544d; background: #fff7f6; }
+.geo-ponto-item.inativo, .cerca-item.inativa { opacity: .6; }
+.celula-selecao { border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; width: 100%; }
+tr.linha-selecionada { background: #f2faf8; box-shadow: inset 3px 0 0 #0f7c75; }
+
+/* Cores da legenda, espelhando os traços do mapa. */
+.geo-legenda i.ponto { background: #0f7c75; }
+.geo-legenda i.fixo { background: #1b5e7a; }
+.geo-legenda i.inativo { background: #98a4b0; }
+.geo-legenda i.conflito { background: #d1635c; }
+.geo-legenda i.selecionada { background: #14a396; }
+.geo-legenda i.contexto { background: #8fa0ae; }
+.geo-legenda i.vencida { background: #e0a04e; }
+.geo-legenda i.rota { background: #0f7c75; }
+
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (max-width: 900px) { .geo-campos.quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mapa-geo { min-height: 240px; } }
+.mapa-falha { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 16px; background: #f5f8f9; color: #7b8a99; font-size: 10px; line-height: 1.5; }
+.mapa-falha strong { color: #a4423c; font-size: 11px; }
+/* Base dessaturada: o fundo recua, a geometria salta. Só o painel de tiles é
+   filtrado — os vetores ficam com a cor cheia da paleta. */
+.leaflet-tile-pane { filter: grayscale(1) brightness(1.06) contrast(.88); }

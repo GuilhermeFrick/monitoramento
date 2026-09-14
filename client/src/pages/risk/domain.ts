@@ -7,9 +7,11 @@ export const STORAGE = {
   // v5: o perfil deixou de ser biblioteca publicada e virou configuracao de cada
   // veiculo, dentro de um grafo de macros. Dado salvo antes nao e migravel.
   configuracoes: "avansat-risk:v5:configuracoes-veiculo",
-  pontos: "avansat-risk:v3:pontos-de-controle",
-  cercas: "avansat-risk:v3:cercas",
-  rotas: "avansat-risk:v3:rotas",
+  // v6: ponto, cerca e rota passaram a carregar geometria com coordenadas. O dado
+  // salvo antes não tem latitude nem longitude, então não há para onde migrar.
+  pontos: "avansat-risk:v6:pontos-de-controle",
+  cercas: "avansat-risk:v6:cercas",
+  rotas: "avansat-risk:v6:rotas",
   rotogramas: "avansat-risk:v3:rotogramas",
   embarques: "avansat-risk:v3:embarques",
   credenciais: "avansat-risk:v3:credenciais",
@@ -890,6 +892,45 @@ export function perfilVigente(config: ConfiguracaoVeiculo): { perfil: PerfilOper
   return { perfil: perfilMantido, macro };
 }
 
+// ------------------------------------------------------------------ Geometria
+//
+// A plataforma **não calcula geometria**. Quem detecta entrada e saída é a
+// geocerca nativa do MDVR, e ela aceita exatamente quatro formas. Por isso o
+// tipo abaixo é uma união fechada: o que não couber nela não pode ser embarcado,
+// e portanto o editor de mapa não pode produzi-lo — nada de mão livre,
+// multipolígono ou polígono com furo.
+//
+// O que a plataforma calcula é só apoio visual na tela (sobreposição, extensão,
+// área). Isso nunca vira critério de disparo: a decisão continua no equipamento.
+
+export type LatLng = { lat: number; lng: number };
+
+export type TipoGeometria = "circulo" | "poligono" | "retangulo" | "linha";
+
+export type GeometriaCirculo = { tipo: "circulo"; centro: LatLng; raioM: number };
+export type GeometriaPoligono = { tipo: "poligono"; vertices: LatLng[] };
+export type GeometriaRetangulo = { tipo: "retangulo"; sudoeste: LatLng; nordeste: LatLng };
+/** Linha com paradas. O corredor é a faixa de tolerância lateral, em metros. */
+export type GeometriaLinha = { tipo: "linha"; vertices: LatLng[]; corredorM: number };
+
+export type Geometria = GeometriaCirculo | GeometriaPoligono | GeometriaRetangulo | GeometriaLinha;
+
+/** Geometrias que uma **área** aceita — ponto de controle e cerca. Linha não é área. */
+export type GeometriaArea = GeometriaCirculo | GeometriaPoligono | GeometriaRetangulo;
+
+export const tipoGeometriaLabel: Record<TipoGeometria, string> = {
+  circulo: "Círculo", poligono: "Polígono", retangulo: "Retângulo", linha: "Linha com paradas",
+};
+
+/**
+ * Limite de vértices por polígono no equipamento.
+ *
+ * ⚠️ **Não confirmado** com o fabricante. Está isolado aqui de propósito: quando
+ * o número real aparecer, troque nesta constante e nada mais precisa mudar. A
+ * interface avisa ao ultrapassar em vez de recusar o traço no meio do desenho.
+ */
+export const MAX_VERTICES_POLIGONO = 24;
+
 // -------------------------------------------------------- Pontos de Controle
 
 export type CategoriaPonto = "cliente" | "pernoite" | "base" | "posto" | "area_risco" | "carga";
@@ -904,19 +945,20 @@ export type PontoDeControle = {
   fixo: boolean;
   precedencia: number | null;
   ativo: boolean;
-  raioM: number;
+  /** Ponto de controle é **área**, nunca alfinete: círculo com raio ou polígono. */
+  geometria: GeometriaArea;
   local: string;
   sobrepoe: string[];
   versao: number;
 };
 
 export const pontosIniciais: PontoDeControle[] = [
-  { id: "PC-001", nome: "CD Itaguaí · doca 4", categoria: "cliente", politica: { macro: "MC-CLIENTE-IN", permanenciaMaxMin: 90, permanenciaMinMin: 15, janela: "06:00–20:00" }, fixo: false, precedencia: 1, ativo: true, raioM: 250, local: "Itaguaí · RJ", sobrepoe: ["PC-006"], versao: 3 },
-  { id: "PC-002", nome: "Pátio pernoite Seropédica", categoria: "pernoite", politica: { macro: "MC-PERNOITE", permanenciaMaxMin: 720, permanenciaMinMin: 0, janela: "20:00–06:00" }, fixo: true, precedencia: null, ativo: true, raioM: 180, local: "Seropédica · RJ", sobrepoe: [], versao: 5 },
-  { id: "PC-003", nome: "Base Campinas · carregamento", categoria: "carga", politica: { macro: "MC-ABASTECIMENTO", permanenciaMaxMin: 120, permanenciaMinMin: 30, janela: "24h" }, fixo: true, precedencia: null, ativo: true, raioM: 400, local: "Campinas · SP", sobrepoe: [], versao: 2 },
-  { id: "PC-004", nome: "Cliente Contagem · portaria B", categoria: "cliente", politica: { macro: "MC-CLIENTE-IN", permanenciaMaxMin: 60, permanenciaMinMin: 10, janela: "07:00–18:00" }, fixo: false, precedencia: null, ativo: true, raioM: 200, local: "Contagem · MG", sobrepoe: [], versao: 1 },
-  { id: "PC-005", nome: "Posto Graal · km 402", categoria: "posto", politica: { macro: "MC-REFEICAO", permanenciaMaxMin: 45, permanenciaMinMin: 0, janela: "24h" }, fixo: false, precedencia: null, ativo: false, raioM: 150, local: "BR-116 · km 402", sobrepoe: [], versao: 1 },
-  { id: "PC-006", nome: "Zona portuária Itaguaí", categoria: "area_risco", politica: { macro: "MC-INICIO", permanenciaMaxMin: 20, permanenciaMinMin: 0, janela: "24h" }, fixo: true, precedencia: null, ativo: true, raioM: 1200, local: "Itaguaí · RJ", sobrepoe: ["PC-001"], versao: 4 },
+  { id: "PC-001", nome: "CD Itaguaí · doca 4", categoria: "cliente", politica: { macro: "MC-CLIENTE-IN", permanenciaMaxMin: 90, permanenciaMinMin: 15, janela: "06:00–20:00" }, fixo: false, precedencia: 1, ativo: true, geometria: { tipo: "circulo", centro: { lat: -22.9270, lng: -43.8180 }, raioM: 250 }, local: "Itaguaí · RJ", sobrepoe: ["PC-006"], versao: 3 },
+  { id: "PC-002", nome: "Pátio pernoite Seropédica", categoria: "pernoite", politica: { macro: "MC-PERNOITE", permanenciaMaxMin: 720, permanenciaMinMin: 0, janela: "20:00–06:00" }, fixo: true, precedencia: null, ativo: true, geometria: { tipo: "circulo", centro: { lat: -22.7438, lng: -43.7071 }, raioM: 180 }, local: "Seropédica · RJ", sobrepoe: [], versao: 5 },
+  { id: "PC-003", nome: "Base Campinas · carregamento", categoria: "carga", politica: { macro: "MC-ABASTECIMENTO", permanenciaMaxMin: 120, permanenciaMinMin: 30, janela: "24h" }, fixo: true, precedencia: null, ativo: true, geometria: { tipo: "poligono", vertices: [{ lat: -22.9012, lng: -47.0668 }, { lat: -22.9008, lng: -47.0552 }, { lat: -22.9098, lng: -47.0544 }, { lat: -22.9112, lng: -47.0652 }] }, local: "Campinas · SP", sobrepoe: [], versao: 2 },
+  { id: "PC-004", nome: "Cliente Contagem · portaria B", categoria: "cliente", politica: { macro: "MC-CLIENTE-IN", permanenciaMaxMin: 60, permanenciaMinMin: 10, janela: "07:00–18:00" }, fixo: false, precedencia: null, ativo: true, geometria: { tipo: "circulo", centro: { lat: -19.9320, lng: -44.0539 }, raioM: 200 }, local: "Contagem · MG", sobrepoe: [], versao: 1 },
+  { id: "PC-005", nome: "Posto Graal · km 402", categoria: "posto", politica: { macro: "MC-REFEICAO", permanenciaMaxMin: 45, permanenciaMinMin: 0, janela: "24h" }, fixo: false, precedencia: null, ativo: false, geometria: { tipo: "circulo", centro: { lat: -22.5372, lng: -44.7756 }, raioM: 150 }, local: "BR-116 · km 402", sobrepoe: [], versao: 1 },
+  { id: "PC-006", nome: "Zona portuária Itaguaí", categoria: "area_risco", politica: { macro: "MC-INICIO", permanenciaMaxMin: 20, permanenciaMinMin: 0, janela: "24h" }, fixo: true, precedencia: null, ativo: true, geometria: { tipo: "circulo", centro: { lat: -22.9350, lng: -43.8280 }, raioM: 1200 }, local: "Itaguaí · RJ", sobrepoe: ["PC-001"], versao: 4 },
 ];
 
 // ------------------------------------------------------------------- Cercas
@@ -931,29 +973,32 @@ export type Cerca = {
   local: string;
   versao: number;
   /** A geometria é cadastrada uma vez e depois vinculada aos veículos. */
-  forma?: "corredor" | "poligono" | "circular";
-  toleranciaM?: number;
-  extensaoKm?: number;
+  geometria: Geometria;
   veiculos?: string[];
   vigenciaInicio?: string;
   vigenciaFim?: string | null;
 };
 
 export const cercasIniciais: Cerca[] = [
-  { id: "CE-01", nome: "Anel Rodoviário · faixa 2", categoria: "velocidade", politica: { permanenciaMaxMin: null, limiteKmh: 80, janela: "24h" }, ativa: true, local: "Belo Horizonte · MG", versao: 2, forma: "corredor", toleranciaM: 300, extensaoKm: 38, veiculos: ["VTR-1783"], vigenciaInicio: "2026-09-01", vigenciaFim: null },
-  { id: "CE-02", nome: "Área restrita · Pátio Itaguaí", categoria: "restrita", politica: { permanenciaMaxMin: 0, limiteKmh: null, janela: "24h" }, ativa: true, local: "Itaguaí · RJ", versao: 3, forma: "poligono", toleranciaM: 30, extensaoKm: 4.2, veiculos: ["VTR-2048", "VTR-0931"], vigenciaInicio: "2026-09-02", vigenciaFim: null },
-  { id: "CE-03", nome: "Base Campinas · portaria noturna", categoria: "horario", politica: { permanenciaMaxMin: null, limiteKmh: null, janela: "22:00–05:00" }, ativa: false, local: "Campinas · SP", versao: 1, forma: "circular", toleranciaM: 50, extensaoKm: 0.8, veiculos: [], vigenciaInicio: "2026-08-20", vigenciaFim: "2026-09-05" },
-  { id: "CE-04", nome: "Perímetro urbano Rio · centro", categoria: "operacional", politica: { permanenciaMaxMin: 40, limiteKmh: 50, janela: "06:00–22:00" }, ativa: true, local: "Rio de Janeiro · RJ", versao: 6, forma: "poligono", toleranciaM: 100, extensaoKm: 17.4, veiculos: ["VTR-2048", "VTR-3110"], vigenciaInicio: "2026-09-01", vigenciaFim: null },
+  { id: "CE-01", nome: "Anel Rodoviário · faixa 2", categoria: "velocidade", politica: { permanenciaMaxMin: null, limiteKmh: 80, janela: "24h" }, ativa: true, local: "Belo Horizonte · MG", versao: 2, veiculos: ["VTR-1783"], vigenciaInicio: "2026-09-01", vigenciaFim: null, geometria: { tipo: "linha", corredorM: 300, vertices: [{ lat: -19.9538, lng: -43.9948 }, { lat: -19.9320, lng: -44.0102 }, { lat: -19.9006, lng: -43.9884 }, { lat: -19.8712, lng: -43.9430 }, { lat: -19.8564, lng: -43.9042 }] } },
+  { id: "CE-02", nome: "Área restrita · Pátio Itaguaí", categoria: "restrita", politica: { permanenciaMaxMin: 0, limiteKmh: null, janela: "24h" }, ativa: true, local: "Itaguaí · RJ", versao: 3, veiculos: ["VTR-2048", "VTR-0931"], vigenciaInicio: "2026-09-02", vigenciaFim: null, geometria: { tipo: "poligono", vertices: [{ lat: -22.9288, lng: -43.8352 }, { lat: -22.9236, lng: -43.8218 }, { lat: -22.9324, lng: -43.8126 }, { lat: -22.9402, lng: -43.8232 }, { lat: -22.9376, lng: -43.8344 }] } },
+  { id: "CE-03", nome: "Base Campinas · portaria noturna", categoria: "horario", politica: { permanenciaMaxMin: null, limiteKmh: null, janela: "22:00–05:00" }, ativa: false, local: "Campinas · SP", versao: 1, veiculos: [], vigenciaInicio: "2026-08-20", vigenciaFim: "2026-09-05", geometria: { tipo: "circulo", centro: { lat: -22.9060, lng: -47.0606 }, raioM: 420 } },
+  { id: "CE-04", nome: "Perímetro urbano Rio · centro", categoria: "operacional", politica: { permanenciaMaxMin: 40, limiteKmh: 50, janela: "06:00–22:00" }, ativa: true, local: "Rio de Janeiro · RJ", versao: 6, veiculos: ["VTR-2048", "VTR-3110"], vigenciaInicio: "2026-09-01", vigenciaFim: null, geometria: { tipo: "retangulo", sudoeste: { lat: -22.9184, lng: -43.1908 }, nordeste: { lat: -22.8942, lng: -43.1620 } } },
 ];
 
 // -------------------------------------------------------------------- Rotas
+//
+// Rota é trajeto **mais corredor**: o desvio se mede como distância ao corredor,
+// não a uma linha. Por isso a largura é um campo em metros dentro da geometria,
+// e a faixa é derivada dela — nunca desenhada à mão.
 
-export type Rota = { id: string; nome: string; origem: string; destino: string; corredorM: number; distanciaKm: number; ativa: boolean; veiculosVinculados: number; desvioAtualM: number | null; versao: number };
+/** A extensão não é guardada: sai do traçado, para não haver dois números discordando. */
+export type Rota = { id: string; nome: string; origem: string; destino: string; geometria: GeometriaLinha; ativa: boolean; veiculosVinculados: number; desvioAtualM: number | null; versao: number };
 
 export const rotasIniciais: Rota[] = [
-  { id: "RT-01", nome: "Campinas → Itaguaí (BR-116)", origem: "Base Campinas", destino: "CD Itaguaí", corredorM: 300, distanciaKm: 512, ativa: true, veiculosVinculados: 14, desvioAtualM: 40, versao: 4 },
-  { id: "RT-02", nome: "Contagem → Rio (BR-040)", origem: "Cliente Contagem", destino: "Perímetro Rio", corredorM: 500, distanciaKm: 438, ativa: true, veiculosVinculados: 9, desvioAtualM: 1240, versao: 2 },
-  { id: "RT-03", nome: "Alça portuária Itaguaí", origem: "Zona portuária", destino: "CD Itaguaí", corredorM: 150, distanciaKm: 11, ativa: false, veiculosVinculados: 0, desvioAtualM: null, versao: 1 },
+  { id: "RT-01", nome: "Campinas → Itaguaí (BR-116)", origem: "Base Campinas", destino: "CD Itaguaí", ativa: true, veiculosVinculados: 14, desvioAtualM: 40, versao: 4, geometria: { tipo: "linha", corredorM: 300, vertices: [{ lat: -22.9056, lng: -47.0608 }, { lat: -22.9670, lng: -46.5390 }, { lat: -23.1790, lng: -45.8870 }, { lat: -22.9660, lng: -45.1180 }, { lat: -22.5372, lng: -44.7756 }, { lat: -22.7900, lng: -44.0480 }, { lat: -22.8722, lng: -43.7756 }, { lat: -22.9270, lng: -43.8180 }] } },
+  { id: "RT-02", nome: "Contagem → Rio (BR-040)", origem: "Cliente Contagem", destino: "Perímetro Rio", ativa: true, veiculosVinculados: 9, desvioAtualM: 1240, versao: 2, geometria: { tipo: "linha", corredorM: 500, vertices: [{ lat: -19.9320, lng: -44.0539 }, { lat: -20.3880, lng: -43.9060 }, { lat: -21.1350, lng: -43.7780 }, { lat: -21.7660, lng: -43.3490 }, { lat: -22.3160, lng: -43.7020 }, { lat: -22.6520, lng: -43.4130 }, { lat: -22.9068, lng: -43.1729 }] } },
+  { id: "RT-03", nome: "Alça portuária Itaguaí", origem: "Zona portuária", destino: "CD Itaguaí", ativa: false, veiculosVinculados: 0, desvioAtualM: null, versao: 1, geometria: { tipo: "linha", corredorM: 150, vertices: [{ lat: -22.9350, lng: -43.8280 }, { lat: -22.9322, lng: -43.8236 }, { lat: -22.9270, lng: -43.8180 }] } },
 ];
 
 // ---------------------------------------------------------------- Rotograma
