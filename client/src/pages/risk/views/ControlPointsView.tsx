@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Check, Clock3, Layers, MapPin, MapPinned, Plus, Send, Upload } from "lucide-react";
+import { AlertTriangle, Check, Clock3, Layers, MapPin, MapPinned, Plus, Send, Sliders, Upload } from "lucide-react";
 import { Modal, Tag, Toggle, useStoredState } from "../shared";
 import {
   MAX_VERTICES_POLIGONO, STORAGE, catalogoMacros, categoriaPontoLabel, newId, nivelDesvioLabel,
@@ -7,9 +7,15 @@ import {
   type CategoriaPonto, type ConfiguracaoVeiculo, type GeometriaArea, type PontoDeControle, type Rotograma, type TipoGeometria, type Trecho,
 } from "../domain";
 import { MapaGeo, type FormaMapa } from "../mapa/MapaGeo";
+import { PainelRecolhivel } from "../mapa/PainelRecolhivel";
 import { BarraFerramentas, EditorGeometria } from "../mapa/EditorGeometria";
 import { centroDe, medidaDe, paresSobrepostos } from "../mapa/geometria";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./perfil/VehicleNavigator";
+
+/** Um ponto com sobreposição merece marca no trilho: é o que trava o embarque. */
+function conflitosDe(sobrepostos: ReturnType<typeof paresSobrepostos<PontoDeControle>>, id: string): boolean {
+  return sobrepostos.some(({ a, b }) => (a.id === id || b.id === id) && a.precedencia === null && b.precedencia === null);
+}
 
 export function usePontos() { return useStoredState<PontoDeControle[]>(STORAGE.pontos, pontosIniciais); }
 
@@ -38,6 +44,9 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
   const [pontoId, setPontoId] = useState(pontos[0]?.id ?? "");
   const [trechoId, setTrechoId] = useState("");
   const [ferramenta, setFerramenta] = useState<TipoGeometria | null>(null);
+  const [listaRecolhida, setListaRecolhida] = useStoredState(STORAGE.painelPontos, false);
+  const [inspetorRecolhido, setInspetorRecolhido] = useStoredState(STORAGE.inspetorPontos, false);
+  const [itinerarioRecolhido, setItinerarioRecolhido] = useStoredState(STORAGE.painelItinerario, false);
   const [navegadorRecolhidoLocal, setNavegadorRecolhidoLocal] = useState(false);
   const navegadorRecolhido = arvore?.estado.painelRecolhido ?? navegadorRecolhidoLocal;
   const config = configs.find((c) => c.veiculo === veiculo.atual) ?? configs[0];
@@ -103,11 +112,14 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
         <div className="geo-corpo">
           {aba === "rotograma" ? <RotogramaWorkspace
             rotograma={rotograma} pontos={pontos} trecho={trechoSelecionado}
+            recolhido={itinerarioRecolhido} onRecolher={() => setItinerarioRecolhido(!itinerarioRecolhido)}
             onTrecho={setTrechoId} onPatch={patchTrecho}
           /> : null}
           {aba === "pontos" ? <PontosWorkspace
             pontos={pontos} selecionado={pontoSelecionado} noRotograma={idsNoRotograma}
             sobrepostos={sobrepostos} ferramenta={ferramenta} onFerramenta={setFerramenta}
+            listaRecolhida={listaRecolhida} inspetorRecolhido={inspetorRecolhido}
+            onLista={() => setListaRecolhida(!listaRecolhida)} onInspetor={() => setInspetorRecolhido(!inspetorRecolhido)}
             onSelecionar={setPontoId} onPatch={patchPonto} onCriar={criarPonto}
             veiculosDoPonto={veiculosDoPonto}
           /> : null}
@@ -124,10 +136,12 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
 // pontos na ordem dos trechos e mostra qual está em curso — por isso aqui não há
 // barra de ferramentas de desenho, só leitura e os limites por trecho.
 
-function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: {
+function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, onTrecho, onPatch }: {
   rotograma?: Rotograma;
   pontos: PontoDeControle[];
   trecho?: Trecho;
+  recolhido: boolean;
+  onRecolher: () => void;
   onTrecho: (id: string) => void;
   onPatch: (id: string, fn: (t: Trecho) => Trecho) => void;
 }) {
@@ -164,7 +178,7 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: {
   if (!rotograma) return <div className="geo-empty"><MapPinned size={28} /><strong>Nenhum rotograma para este veículo</strong><span>Crie uma jornada a partir dos pontos de controle cadastrados.</span><button className="geo-btn primario"><Plus size={13} /> Criar rotograma</button></div>;
 
   const totalKm = rotograma.trechos.reduce((total, t) => total + t.distanciaKm, 0);
-  return <div className="geo-rotograma-grid">
+  return <div className={`geo-rotograma-grid ${recolhido ? "itinerario-recolhido" : ""}`}>
     <div className="geo-mapa-card">
       <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{totalKm} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
       <MapaGeo formas={formas} ajuste={`rg-${rotograma.id}`} rotulo={`Mapa do rotograma de ${rotograma.veiculo}`} />
@@ -173,8 +187,22 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: {
         <span className="geo-legenda-nota">adiantar também é desvio</span>
       </div>
     </div>
-    <aside className="geo-itinerario">
-      <div className="geo-card-head"><div><strong>Sequência do rotograma</strong><span>Clique num trecho, aqui ou no mapa</span></div></div>
+    <PainelRecolhivel
+      recolhido={recolhido}
+      onAlternar={onRecolher}
+      titulo="Sequência do rotograma"
+      subtitulo="Clique num trecho, aqui ou no mapa"
+      lado="direita"
+      classe="geo-itinerario"
+      atalhos={rotograma.trechos.map((t, index) => ({
+        id: t.id,
+        icone: <span className="geo-trilho-num">{index + 1}</span>,
+        rotulo: `Trecho ${index + 1} · ${nomePonto(t.de, pontos)} → ${nomePonto(t.para, pontos)}`,
+        ativo: trecho?.id === t.id,
+        estado: index < rotograma.trechoAtual ? "ok" : index === rotograma.trechoAtual ? "atencao" : "inativo",
+        aoClicar: () => onTrecho(t.id),
+      }))}
+    >
       <div className="geo-trechos">{rotograma.trechos.map((t, index) => {
         const ativo = trecho?.id === t.id;
         const estado = index < rotograma.trechoAtual ? "concluido" : index === rotograma.trechoAtual ? "em-curso" : "planejado";
@@ -188,18 +216,22 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, onTrecho, onPatch }: {
         <CampoNumero label="Velocidade" unidade="km/h" valor={trecho.limites.velocidadeKmh} onChange={(valor) => onPatch(trecho.id, (t) => ({ ...t, limites: { ...t.limites, velocidadeKmh: valor } }))} />
         <CampoNumero label="Parada máx." unidade="min" valor={trecho.limites.paradaMaxMin} onChange={(valor) => onPatch(trecho.id, (t) => ({ ...t, limites: { ...t.limites, paradaMaxMin: valor } }))} />
       </div></div> : null}
-    </aside>
+    </PainelRecolhivel>
   </div>;
 }
 
 // ----------------------------------------------------------------- Pontos
 
-function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferramenta, onFerramenta, onSelecionar, onPatch, onCriar, veiculosDoPonto }: {
+function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferramenta, listaRecolhida, inspetorRecolhido, onLista, onInspetor, onFerramenta, onSelecionar, onPatch, onCriar, veiculosDoPonto }: {
   pontos: PontoDeControle[];
   selecionado?: PontoDeControle;
   noRotograma: Set<string>;
   sobrepostos: ReturnType<typeof paresSobrepostos<PontoDeControle>>;
   ferramenta: TipoGeometria | null;
+  listaRecolhida: boolean;
+  inspetorRecolhido: boolean;
+  onLista: () => void;
+  onInspetor: () => void;
   onFerramenta: (t: TipoGeometria | null) => void;
   onSelecionar: (id: string) => void;
   onPatch: (id: string, descricao: string, fn: (p: PontoDeControle) => PontoDeControle) => void;
@@ -231,14 +263,27 @@ function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferram
 
   const afetados = selecionado ? veiculosDoPonto(selecionado.id) : [];
 
-  return <div className="geo-pontos-grid">
-    <div className="geo-lista-pontos">
-      <div className="geo-card-head"><div><strong>Catálogo de pontos</strong><span>Áreas reutilizáveis nos rotogramas</span></div></div>
+  return <div className={`geo-pontos-grid ${listaRecolhida ? "lista-recolhida" : ""} ${inspetorRecolhido ? "inspetor-recolhido" : ""}`}>
+    <PainelRecolhivel
+      recolhido={listaRecolhida}
+      onAlternar={onLista}
+      titulo="Catálogo de pontos"
+      subtitulo="Áreas reutilizáveis nos rotogramas"
+      classe="geo-lista-pontos"
+      atalhos={pontos.map((p) => ({
+        id: p.id,
+        icone: <MapPin size={15} />,
+        rotulo: `${p.nome} · ${p.local}`,
+        ativo: selecionado?.id === p.id,
+        estado: !p.ativo ? "inativo" : conflitosDe(sobrepostos, p.id) ? "risco" : "ok",
+        aoClicar: () => onSelecionar(p.id),
+      }))}
+    >
       {pontos.map((p) => <button key={p.id} className={`geo-ponto-item ${selecionado?.id === p.id ? "selecionado" : ""} ${p.ativo ? "" : "inativo"}`} onClick={() => onSelecionar(p.id)}>
         <MapPin size={14} /><span><strong>{p.nome}</strong><small>{p.local} · {medidaDe(p.geometria)}</small></span>
         {noRotograma.has(p.id) ? <Tag tone="blue">na viagem</Tag> : null}
       </button>)}
-    </div>
+    </PainelRecolhivel>
 
     <div className="geo-mapa-card">
       <div className="geo-card-head"><div><strong>Pontos no mapa</strong><span>Arraste as alças para ajustar a área</span></div></div>
@@ -269,8 +314,16 @@ function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferram
       </div>
     </div>
 
-    {selecionado ? <aside className="geo-inspetor">
-      <div className="geo-card-head"><div><strong>{selecionado.nome}</strong><span>{selecionado.id} · v{selecionado.versao}</span></div><Toggle checked={selecionado.ativo} onChange={(ativo) => onPatch(selecionado.id, ativo ? "Ponto ativado" : "Ponto inativado", (p) => ({ ...p, ativo }))} /></div>
+    {selecionado ? <PainelRecolhivel
+      recolhido={inspetorRecolhido}
+      onAlternar={onInspetor}
+      titulo={selecionado.nome}
+      subtitulo={`${selecionado.id} · v${selecionado.versao}`}
+      lado="direita"
+      classe="geo-inspetor"
+      atalhos={[{ id: selecionado.id, icone: <Sliders size={15} />, rotulo: `Abrir configuração de ${selecionado.nome}`, ativo: true, estado: conflitosDe(sobrepostos, selecionado.id) ? "risco" : undefined, aoClicar: onInspetor }]}
+    >
+      <div className="geo-inspetor-acao"><Toggle checked={selecionado.ativo} onChange={(ativo) => onPatch(selecionado.id, ativo ? "Ponto ativado" : "Ponto inativado", (p) => ({ ...p, ativo }))} label={selecionado.ativo ? "Ativo" : "Inativo"} /></div>
 
       {conflitos.length ? <div className="geo-conflito">
         <AlertTriangle size={14} />
@@ -304,7 +357,7 @@ function PontosWorkspace({ pontos, selecionado, noRotograma, sobrepostos, ferram
       <div className="geo-resumo-regra"><Clock3 size={13} /><span>Ao entrar, registra <strong>{nomeMacro(selecionado.politica.macro)}</strong>. Janela {selecionado.politica.janela}.</span></div>
       <label className="geo-toggle-linha"><span><strong>Ponto fixo</strong><small>Sobrevive à limpeza da política embarcada</small></span><Toggle checked={selecionado.fixo} onChange={(fixo) => onPatch(selecionado.id, fixo ? "Marcado como fixo" : "Deixou de ser fixo", (p) => ({ ...p, fixo }))} /></label>
       {afetados.length ? <div className="geo-afetados"><Upload size={12} /><span>Alterar esta área vira rascunho em <strong>{afetados.join(", ")}</strong>. Embarque pela política do veículo.</span></div> : null}
-    </aside> : null}
+    </PainelRecolhivel> : null}
   </div>;
 }
 

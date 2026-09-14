@@ -37,10 +37,10 @@ function render(rotulo: string, elemento: React.ReactElement, marcadores: string
 // O servidor precisa entregar o contêiner do mapa com altura reservada — é o que
 // evita o pulo de layout quando o Leaflet monta no cliente.
 const rotograma = render("rotograma", createElement(ControlPointsView as any, { ...props, pontos: d.pontosIniciais, setPontos: () => {} }),
-  ["Pontos de controle e rotograma", "Veículos", "Rotograma", "Visão da viagem", "Sequência do rotograma", "Publicar", "mapa-geo", "mapa-tela"]);
+  ["Pontos de controle e rotograma", "Veículos", "Rotograma", "Visão da viagem", "Sequência do rotograma", "Publicar", "mapa-geo", "mapa-tela", "geo-painel-toggle"]);
 
 render("cercas", createElement(FencesView as any, props),
-  ["Cercas eletrônicas", "Veículos", "Vinculadas", "Catálogo", "Configuração da cerca", "Desvincular", "mapa-geo", "Desenhar", "Geometria"]);
+  ["Cercas eletrônicas", "Veículos", "Vinculadas", "Catálogo", "Configuração da cerca", "Desvincular", "mapa-geo", "Desenhar", "Geometria", "geo-painel-toggle"]);
 
 render("cercas sem vínculo", createElement(FencesView as any, { ...props, veiculo: { atual: "VTR-2240", selecionar: () => {} } }),
   ["Nenhuma cerca vinculada", "Abrir catálogo"]);
@@ -49,6 +49,10 @@ render("rotas", createElement(RoutesView as any, { onToast: () => {}, onGoRotogr
   ["Rotas", "Corredores", "mapa-geo", "Rota não é rotograma", "corredor", "Extensão"]);
 
 if (rotograma && /leaflet-container|leaflet-pane/.test(rotograma)) falhar("Leaflet montou no servidor: o import precisa continuar dinâmico dentro do efeito");
+
+// O mapa é a ferramenta destas telas: os painéis de apoio precisam continuar
+// recolhíveis, senão o mapa volta a ser espremido entre três colunas fixas.
+if (rotograma && !rotograma.includes("ampliar o mapa")) falhar("o painel de apoio perdeu o botão de recolher");
 
 // A sobreposição declarada no mock tem de ser real no mapa, senão o aviso de
 // precedência nunca aparece para o operador.

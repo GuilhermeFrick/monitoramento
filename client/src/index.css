@@ -1046,7 +1046,8 @@ tbody tr:hover { background: #fbfdfd; }
 .geo-btn.primario { border-color: #144796; background: #144796; color: #fff; }
 .geo-btn.primario:hover { background: #0f3c82; }
 .geo-corpo { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 12px; background: #f6f8fa; }
-.geo-rotograma-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: minmax(360px, 1fr) 350px; gap: 10px; }
+.geo-rotograma-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: minmax(440px, 1fr) 310px; gap: 10px; transition: grid-template-columns .18s ease; }
+.geo-rotograma-grid.itinerario-recolhido { grid-template-columns: minmax(440px, 1fr) 46px; }
 .geo-mapa-card, .geo-itinerario, .geo-lista-pontos, .geo-inspetor, .cerca-lista { min-width: 0; overflow: hidden; border: 1px solid #dfe6eb; border-radius: 9px; background: #fff; }
 .geo-card-head { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border-bottom: 1px solid #edf1f4; }
 .geo-card-head > div { min-width: 0; }
@@ -1071,7 +1072,10 @@ tbody tr:hover { background: #fbfdfd; }
 .geo-numero { display: flex; align-items: center; height: 29px; overflow: hidden; border: 1px solid #dfe6eb; border-radius: 6px; background: #fff; }
 .geo-numero input { width: 100%; min-width: 0; height: 27px; padding: 4px 7px; border: 0; background: transparent; color: #3b4f62; font-size: 10.5px; }
 .geo-numero small { padding-right: 7px; color: #8d99a4; font-size: 8.5px; white-space: nowrap; }
-.geo-pontos-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: 260px minmax(310px,1fr) 280px; gap: 10px; }
+.geo-pontos-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: 232px minmax(440px,1fr) 288px; gap: 10px; transition: grid-template-columns .18s ease; }
+.geo-pontos-grid.lista-recolhida { grid-template-columns: 46px minmax(440px,1fr) 288px; }
+.geo-pontos-grid.inspetor-recolhido { grid-template-columns: 232px minmax(440px,1fr) 46px; }
+.geo-pontos-grid.lista-recolhida.inspetor-recolhido { grid-template-columns: 46px minmax(440px,1fr) 46px; }
 .geo-lista-pontos, .cerca-lista { overflow-y: auto; }
 .geo-ponto-item, .cerca-item { width: 100%; min-height: 47px; display: grid; grid-template-columns: 24px minmax(0,1fr) auto; align-items: center; gap: 7px; padding: 6px 9px; border: 0; border-bottom: 1px solid #f0f3f5; background: transparent; text-align: left; cursor: pointer; }
 .geo-ponto-item:hover, .cerca-item:hover { background: #f8fafb; }.geo-ponto-item.selecionado, .cerca-item.selecionado { background: #eef2ff; box-shadow: inset 3px 0 #5880fb; }
@@ -1084,7 +1088,10 @@ tbody tr:hover { background: #fbfdfd; }
 .geo-toggle-linha { grid-template-columns: minmax(0,1fr) auto !important; align-items: center; padding: 8px 0; border-top: 1px solid #edf1f4; }.geo-toggle-linha strong, .geo-toggle-linha small { display: block; }.geo-toggle-linha small { margin-top: 2px; color: #929eaa; font-weight: 400; }
 .geo-empty { height: 100%; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: #8794a0; text-align: center; }.geo-empty strong { color: #405467; font-size: 12px; }.geo-empty span { max-width: 340px; font-size: 10px; }
 
-.cerca-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: 260px minmax(310px,1fr) 300px; gap: 10px; }
+.cerca-grid { height: 100%; min-height: 440px; display: grid; grid-template-columns: 232px minmax(440px,1fr) 296px; gap: 10px; transition: grid-template-columns .18s ease; }
+.cerca-grid.lista-recolhida { grid-template-columns: 46px minmax(440px,1fr) 296px; }
+.cerca-grid.inspetor-recolhido { grid-template-columns: 232px minmax(440px,1fr) 46px; }
+.cerca-grid.lista-recolhida.inspetor-recolhido { grid-template-columns: 46px minmax(440px,1fr) 46px; }
 .cerca-item { grid-template-columns: 27px minmax(0,1fr) 8px; }
 .cerca-item > i { width: 7px; height: 7px; border-radius: 50%; background: #c4cdd5; }.cerca-item > i.ativo { background: #2eaa8c; }
 .cerca-icone { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 6px; background: #eef2ff; color: #144796; }.cerca-icone.cerca-restrita { background: #fdeceb; color: #b23b35; }.cerca-icone.cerca-velocidade { background: #fff4df; color: #a36b16; }.cerca-icone.cerca-operacional { background: #e9f6f2; color: #177865; }
@@ -1092,8 +1099,12 @@ tbody tr:hover { background: #fbfdfd; }
 .cerca-vigencia { background: #f7f8fa; }.cerca-vigencia strong, .cerca-vigencia small { display: block; }.cerca-vigencia small { margin-top: 2px; color: #8996a2; }
 
 @media (max-width: 1120px) {
-  .geo-pontos-grid, .cerca-grid { grid-template-columns: 220px minmax(300px,1fr) 250px; }
-  .geo-rotograma-grid { grid-template-columns: minmax(320px,1fr) 320px; }
+  .geo-pontos-grid, .cerca-grid { grid-template-columns: 208px minmax(380px,1fr) 260px; }
+  .geo-pontos-grid.lista-recolhida, .cerca-grid.lista-recolhida { grid-template-columns: 46px minmax(380px,1fr) 260px; }
+  .geo-pontos-grid.inspetor-recolhido, .cerca-grid.inspetor-recolhido { grid-template-columns: 208px minmax(380px,1fr) 46px; }
+  .geo-pontos-grid.lista-recolhida.inspetor-recolhido, .cerca-grid.lista-recolhida.inspetor-recolhido { grid-template-columns: 46px minmax(380px,1fr) 46px; }
+  .geo-rotograma-grid { grid-template-columns: minmax(380px,1fr) 288px; }
+  .geo-rotograma-grid.itinerario-recolhido { grid-template-columns: minmax(380px,1fr) 46px; }
 }
 @media (max-width: 900px) {
   .geo-pontos-grid, .cerca-grid { grid-template-columns: 210px minmax(360px,1fr); }
@@ -1194,3 +1205,22 @@ tr.linha-selecionada { background: #f2faf8; box-shadow: inset 3px 0 0 #0f7c75; }
 /* Base dessaturada: o fundo recua, a geometria salta. Só o painel de tiles é
    filtrado — os vetores ficam com a cor cheia da paleta. */
 .leaflet-tile-pane { filter: grayscale(1) brightness(1.06) contrast(.88); }
+
+/* --------------------- Painéis de apoio que viram trilho ---------------------
+   Recolhido, o painel mantém a troca de item por ícone; some a descrição, não a
+   navegação. O mapa fica com todo o espaço liberado. */
+.geo-trilho { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; min-width: 0; overflow: hidden; border: 1px solid #dfe6eb; border-radius: 9px; background: #fff; }
+.geo-trilho-toggle { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #e4ebef; border-radius: 7px; background: #f7fafb; color: #64748b; cursor: pointer; }
+.geo-trilho-toggle:hover { border-color: #b6d6d1; color: #0f716b; background: #eef7f5; }
+.geo-trilho-atalhos { width: 100%; display: grid; gap: 5px; overflow-y: auto; justify-items: center; }
+.geo-trilho-atalhos button { position: relative; width: 36px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: #7b8896; display: grid; place-items: center; cursor: pointer; }
+.geo-trilho-atalhos button:hover { background: #eef7f5; color: #0f716b; }
+.geo-trilho-atalhos button.ativo { background: #eef7f5; color: #0b5f59; box-shadow: inset 3px 0 #0f7c75; }
+.geo-trilho-num { font-size: 11px; font-weight: 800; font-family: 'DM Mono', ui-monospace, monospace; }
+.geo-trilho-ponto { position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; border: 1px solid #fff; background: #9aa6b1; }
+.geo-trilho-ponto.ok { background: #35ad91; } .geo-trilho-ponto.atencao { background: #e0a04e; }
+.geo-trilho-ponto.inativo { background: #b4bfc9; } .geo-trilho-ponto.risco { background: #d1635c; }
+.geo-painel-toggle { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #e4ebef; border-radius: 7px; background: #fff; color: #7b8896; cursor: pointer; }
+.geo-painel-toggle:hover { border-color: #b6d6d1; color: #0f716b; background: #eef7f5; }
+.geo-inspetor-acao { display: flex; justify-content: flex-end; }
+@media (max-width: 1180px) { .geo-trilho-atalhos button { width: 32px; height: 32px; } }

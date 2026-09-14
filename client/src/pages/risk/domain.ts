@@ -19,6 +19,12 @@ export const STORAGE = {
   mensagens: "avansat-risk:v3:mensagens",
   comandos: "avansat-risk:v3:historico-comandos",
   textosComando: "avansat-risk:v3:textos-comando",
+  // Conveniências de tela: o operador escolhe quanta lista quer ver ao lado do mapa.
+  painelCercas: "avansat-risk:v6:painel-cercas",
+  inspetorCercas: "avansat-risk:v6:inspetor-cercas",
+  painelPontos: "avansat-risk:v6:painel-pontos",
+  inspetorPontos: "avansat-risk:v6:inspetor-pontos",
+  painelItinerario: "avansat-risk:v6:painel-itinerario",
 } as const;
 
 // ---------------------------------------------------------------- Equipamentos

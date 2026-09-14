@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, Check, Globe2, Link2, MapPin, Plus, Truck, Unlink2, Upload } from "lucide-react";
+import { CalendarDays, Check, Globe2, Link2, MapPin, Plus, Sliders, Truck, Unlink2, Upload } from "lucide-react";
 import { Modal, Tag, Toggle, useStoredState } from "../shared";
 import { STORAGE, cercasIniciais, newId, tipoGeometriaLabel, type Cerca, type ConfiguracaoVeiculo, type Geometria, type TipoGeometria } from "../domain";
 import { MapaGeo, type FormaMapa } from "../mapa/MapaGeo";
+import { PainelRecolhivel } from "../mapa/PainelRecolhivel";
 import { BarraFerramentas, EditorGeometria } from "../mapa/EditorGeometria";
 import { geometriaPadrao, medidaDe } from "../mapa/geometria";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./perfil/VehicleNavigator";
@@ -39,6 +40,8 @@ export function FencesView({ configs, veiculo, arvore, busca, onBusca, onLimparB
   const [cercaId, setCercaId] = useState(cercas[0]?.id ?? "");
   const [showNew, setShowNew] = useState(false);
   const [ferramenta, setFerramenta] = useState<TipoGeometria | null>(null);
+  const [listaRecolhida, setListaRecolhida] = useStoredState(STORAGE.painelCercas, false);
+  const [inspetorRecolhido, setInspetorRecolhido] = useStoredState(STORAGE.inspetorCercas, false);
   const [navegadorRecolhidoLocal, setNavegadorRecolhidoLocal] = useState(false);
   const navegadorRecolhido = arvore?.estado.painelRecolhido ?? navegadorRecolhidoLocal;
   const config = configs.find((c) => c.veiculo === veiculo.atual) ?? configs[0];
@@ -130,15 +133,28 @@ export function FencesView({ configs, veiculo, arvore, busca, onBusca, onLimparB
           <button role="tab" aria-selected={aba === "catalogo"} className={aba === "catalogo" ? "ativa" : ""} onClick={() => setAba("catalogo")}>Catálogo · {cercas.length}</button>
         </nav>
         <div className="geo-corpo">
-          {visiveis.length ? <div className="cerca-grid">
-            <div className="cerca-lista">
-              <div className="geo-card-head"><div><strong>{aba === "vinculadas" ? "Cercas deste veículo" : "Cercas disponíveis"}</strong><span>Selecione para visualizar e configurar</span></div></div>
+          {visiveis.length ? <div className={`cerca-grid ${listaRecolhida ? "lista-recolhida" : ""} ${inspetorRecolhido ? "inspetor-recolhido" : ""}`}>
+            <PainelRecolhivel
+              recolhido={listaRecolhida}
+              onAlternar={() => setListaRecolhida(!listaRecolhida)}
+              titulo={aba === "vinculadas" ? "Cercas deste veículo" : "Cercas disponíveis"}
+              subtitulo="Selecione para visualizar e configurar"
+              classe="cerca-lista"
+              atalhos={visiveis.map((item) => ({
+                id: item.id,
+                icone: <Globe2 size={15} />,
+                rotulo: `${item.nome} · ${item.local}`,
+                ativo: cerca?.id === item.id,
+                estado: !item.ativa ? "inativo" : vigente(item) ? "ok" : "atencao",
+                aoClicar: () => setCercaId(item.id),
+              }))}
+            >
               {visiveis.map((item) => <button key={item.id} className={`cerca-item ${cerca?.id === item.id ? "selecionado" : ""} ${item.ativa ? "" : "inativa"}`} onClick={() => setCercaId(item.id)}>
                 <span className={`cerca-icone cerca-${item.categoria}`}><Globe2 size={14} /></span>
                 <span><strong>{item.nome}</strong><small>{item.local} · {tipoGeometriaLabel[item.geometria.tipo]}</small></span>
                 <i className={item.ativa ? "ativo" : ""} />
               </button>)}
-            </div>
+            </PainelRecolhivel>
 
             <div className="geo-mapa-card cerca-mapa-card">
               <div className="geo-card-head"><div><strong>{cerca.nome}</strong><span>{cerca.local} · {medidaDe(cerca.geometria)}</span></div><Tag tone={!cerca.ativa ? "neutral" : vigente(cerca) ? "teal" : "amber"}>{!cerca.ativa ? "Inativa" : vigente(cerca) ? "Ativa" : "Fora da vigência"}</Tag></div>
@@ -165,8 +181,16 @@ export function FencesView({ configs, veiculo, arvore, busca, onBusca, onLimparB
               </div>
             </div>
 
-            <aside className="geo-inspetor cerca-inspetor">
-              <div className="geo-card-head"><div><strong>Configuração da cerca</strong><span>{cerca.id} · versão {cerca.versao}</span></div><Toggle checked={cerca.ativa} onChange={(ativa) => patch(cerca.id, ativa ? "Cerca reativada" : "Cerca inativada", (c) => ({ ...c, ativa }))} /></div>
+            <PainelRecolhivel
+              recolhido={inspetorRecolhido}
+              onAlternar={() => setInspetorRecolhido(!inspetorRecolhido)}
+              titulo="Configuração da cerca"
+              subtitulo={`${cerca.id} · versão ${cerca.versao}`}
+              lado="direita"
+              classe="geo-inspetor cerca-inspetor"
+              atalhos={[{ id: cerca.id, icone: <Sliders size={15} />, rotulo: `Abrir configuração de ${cerca.nome}`, ativo: true, aoClicar: () => setInspetorRecolhido(false) }]}
+            >
+              <div className="geo-inspetor-acao"><Toggle checked={cerca.ativa} onChange={(ativa) => patch(cerca.id, ativa ? "Cerca reativada" : "Cerca inativada", (c) => ({ ...c, ativa }))} label={cerca.ativa ? "Ativa" : "Inativa"} /></div>
               {!cerca.ativa ? <p className="geo-nota-inativa">Inativa continua cadastrada e some do mapa só de cor: desativar não é excluir.</p> : null}
 
               <div className={`cerca-vinculo ${vinculada ? "vinculado" : ""}`}>
@@ -197,7 +221,7 @@ export function FencesView({ configs, veiculo, arvore, busca, onBusca, onLimparB
               <div className="cerca-vigencia"><CalendarDays size={14} /><span><strong>Vigência</strong><small>{cerca.vigenciaInicio ?? "Não iniciada"} → {cerca.vigenciaFim ?? "sem término"}{vigente(cerca) ? "" : " · fora da janela de hoje"}</small></span></div>
               <div className="cerca-resumo"><MapPin size={13} /><span>{categoriaLabel[cerca.categoria]} · {cerca.politica.permanenciaMaxMin === 0 ? "entrada proibida" : cerca.politica.permanenciaMaxMin ? `permanência máxima ${cerca.politica.permanenciaMaxMin} min` : "sem limite de permanência"}</span></div>
               {(cerca.veiculos ?? []).length ? <div className="geo-afetados"><Upload size={12} /><span>Alterações viram rascunho em <strong>{(cerca.veiculos ?? []).join(", ")}</strong>. Embarque pela política do veículo.</span></div> : null}
-            </aside>
+            </PainelRecolhivel>
           </div> : <div className="geo-empty"><Globe2 size={28} /><strong>Nenhuma cerca vinculada</strong><span>Abra o catálogo e vincule uma geometria existente a {config.veiculo}.</span><button className="geo-btn primario" onClick={() => setAba("catalogo")}><Link2 size={13} /> Abrir catálogo</button></div>}
         </div>
       </section>
