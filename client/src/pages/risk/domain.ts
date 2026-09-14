@@ -67,15 +67,16 @@ export const canalLabel: Record<Equipamento["canal"], string> = { celular: "Celu
 export type Atuador = "bloqueio_motor" | "trava_bau" | "sirene" | "luz_alerta" | "trava_quinta_roda";
 export type PosturaAtuador = "ligado" | "desligado";
 export type ModoAcionamento = "temporario" | "permanente";
-export type Sensor = "porta_bau" | "porta_cabine" | "ignicao" | "velocidade" | "engate" | "painel" | "movimento";
+export type Sensor = "botao_panico" | "porta_bau" | "porta_cabine" | "ignicao" | "velocidade" | "engate" | "painel" | "movimento";
 
 export const atuadorLabel: Record<Atuador, string> = { bloqueio_motor: "Bloqueio de motor", trava_bau: "Trava do baú", sirene: "Sirene", luz_alerta: "Luz de alerta", trava_quinta_roda: "Trava da quinta roda" };
 export const posturaLabel: Record<PosturaAtuador, string> = { ligado: "Ligado", desligado: "Desligado" };
 export const acionamentoLabel: Record<ModoAcionamento, string> = { temporario: "Temporário", permanente: "Permanente" };
-export const sensorLabel: Record<Sensor, string> = { porta_bau: "Porta do baú", porta_cabine: "Porta da cabine", ignicao: "Ignição", velocidade: "Velocidade", engate: "Engate / desengate", painel: "Painel do equipamento", movimento: "Movimento" };
+export const sensorLabel: Record<Sensor, string> = { botao_panico: "Botão de pânico", porta_bau: "Porta do baú", porta_cabine: "Porta da cabine", ignicao: "Ignição", velocidade: "Velocidade", engate: "Engate / desengate", painel: "Painel do equipamento", movimento: "Movimento" };
 
 /** Estados que cada sensor pode assumir. O perfil escolhe qual conta como violação (`DEV-73`). */
 export const estadosSensor: Record<Sensor, string[]> = {
+  botao_panico: ["Pressionado", "Normal"],
   porta_bau: ["Aberta", "Fechada"],
   porta_cabine: ["Aberta", "Fechada"],
   ignicao: ["Ligada", "Desligada"],
@@ -280,6 +281,8 @@ export type ConfiguracaoVeiculo = {
   perfilPadrao: PerfilOperacional;
   macros: MacroVeiculo[];
   transicoes: Transicao[];
+  /** O que existe fisicamente neste veículo — ver `MapaIO`. */
+  mapaIO: MapaIO;
   /** Onde o veículo está agora na sequência — `null` significa perfil padrão. */
   macroVigente: string | null;
   desde: string;
@@ -319,6 +322,213 @@ export function statusConfig(c: ConfiguracaoVeiculo): StatusSync {
   return "sincronizado";
 }
 
+// ------------------------------------------------------- Mapa de I/O do veículo
+//
+// Onde o nome de domínio ganha um canal físico. O perfil operacional fala em
+// `trava_bau`; é aqui que `trava_bau` vira a saída digital 2 daquele MDVR.
+// Sem este mapa, todo veículo teria de ter os mesmos periféricos — e não tem:
+// um cavalo mecânico tem quinta roda, uma van urbana não.
+//
+// Há um segundo motivo: hoje metade da configuração de um sensor vive na tela
+// web do próprio MDVR (pino, polaridade, debounce) e metade no nosso JSON (o
+// nome de domínio). As duas podem divergir **em silêncio**. Aqui elas aparecem
+// lado a lado.
+
+export type FonteSinal = "nativo" | "expansor485" | "can";
+export const fonteSinalLabel: Record<FonteSinal, string> = { nativo: "Nativo", expansor485: "Expansor RS485", can: "CAN" };
+
+export type Polaridade = "alta" | "baixa";
+export const polaridadeLabel: Record<Polaridade, string> = { alta: "Aciona em nível alto", baixa: "Aciona em nível baixo" };
+
+export type EntradaIO = {
+  id: string;
+  canal: string;
+  fonte: FonteSinal;
+  nome: string;
+  /** Nome de domínio pelo qual o perfil operacional referencia esta entrada. */
+  funcao: Sensor | null;
+  polaridade: Polaridade;
+  /** Tolerância por periférico (`DEV-32`) — config do adaptador, não regra. */
+  debounceSeg: number;
+  habilitado: boolean;
+};
+
+export type SaidaIO = {
+  id: string;
+  canal: string;
+  fonte: Exclude<FonteSinal, "can">;
+  nome: string;
+  funcao: Atuador | null;
+  /** Padrão do canal. O perfil pode especializar por atuador (`DEV-74`). */
+  modoPadrao: ModoAcionamento;
+  duracaoPadraoSeg: number;
+  habilitado: boolean;
+};
+
+export type FuncaoSerial = "livre" | "expansor_io" | "satelite" | "lorawan" | "teclado" | "r_watch";
+export const funcaoSerialLabel: Record<FuncaoSerial, string> = {
+  livre: "Livre", expansor_io: "Expansor de I/O", satelite: "Terminal satelital",
+  lorawan: "Gateway LoRaWAN", teclado: "Teclado / leitor", r_watch: "R-Watch",
+};
+
+export type BaudRate = 4800 | 9600 | 19200 | 38400 | 57600 | 115200;
+export const baudRates: BaudRate[] = [4800, 9600, 19200, 38400, 57600, 115200];
+
+export type PortaSerial = {
+  id: string;
+  porta: "RS232-1" | "RS232-2" | "RS485";
+  funcao: FuncaoSerial;
+  observacao: string;
+  habilitado?: boolean;
+  baudRate: BaudRate;
+  /** Endereço é obrigatório apenas para periféricos do barramento RS485. */
+  endereco?: number;
+};
+
+export type ProtocoloCAN = "j1939" | "obd2_diagnostico" | "j1939_tacografo";
+export const protocoloCANLabel: Record<ProtocoloCAN, string> = {
+  j1939: "J1939",
+  obd2_diagnostico: "OBD-II · diagnóstico",
+  j1939_tacografo: "J1939 · tacógrafo",
+};
+export type RedeCAN = { id: string; rede: "CAN1"; protocolo: ProtocoloCAN; habilitado: boolean };
+
+export type MapaIO = { entradas: EntradaIO[]; saidas: SaidaIO[]; seriais: PortaSerial[]; redesCAN: RedeCAN[] };
+
+/**
+ * Limites físicos por modelo.
+ *
+ * Os números do M1N 2.0 foram **lidos do próprio equipamento**; os do X1NAI
+ * vieram de documentação e nunca foram conferidos — por isso `verificado`
+ * existe, e a interface precisa dizer isso. Configurar um canal que o modelo
+ * não tem falha no embarque, longe de quem conserta.
+ */
+export type CapacidadeModelo = { rotulo: string; entradas: number; saidas: number; seriais: number; verificado: boolean };
+
+export const capacidadePorLinha: Record<Equipamento["linha"], CapacidadeModelo> = {
+  "MDVR-8 Pro": { rotulo: "MDVR com expansor opcional", entradas: 8, saidas: 2, seriais: 3, verificado: true },
+  "MDVR-8": { rotulo: "MDVR com expansor opcional", entradas: 8, saidas: 2, seriais: 3, verificado: true },
+  "MDVR-4": { rotulo: "MDVR com expansor opcional", entradas: 8, saidas: 2, seriais: 3, verificado: true },
+};
+
+export const capacidadeDe = (veiculo: string): CapacidadeModelo => capacidadePorLinha[(equipamentos.find((e) => e.veiculo === veiculo) ?? equipamentos[0]).linha];
+
+const sensoresPadraoIO: { nome: string; funcao: Sensor }[] = [
+  { nome: "Botão de pânico", funcao: "botao_panico" },
+  { nome: "Porta do baú", funcao: "porta_bau" },
+  { nome: "Porta da cabine", funcao: "porta_cabine" },
+  { nome: "Ignição", funcao: "ignicao" },
+  { nome: "Painel do equipamento", funcao: "painel" },
+  { nome: "Velocidade", funcao: "velocidade" },
+  { nome: "Movimento", funcao: "movimento" },
+  { nome: "Engate", funcao: "engate" },
+];
+
+const atuadoresPadraoIO: { nome: string; funcao: Atuador }[] = [
+  { nome: "Bloqueio de motor", funcao: "bloqueio_motor" },
+  { nome: "Trava do baú", funcao: "trava_bau" },
+  { nome: "Sirene", funcao: "sirene" },
+  { nome: "Luz de alerta", funcao: "luz_alerta" },
+  { nome: "Trava da quinta roda", funcao: "trava_quinta_roda" },
+];
+
+const entradaPorFuncao = (mapa: MapaIO, funcao: Sensor | undefined) => funcao ? mapa.entradas.find((e) => e.funcao === funcao) : undefined;
+const saidaPorFuncao = (mapa: MapaIO, funcao: Atuador | undefined) => funcao ? mapa.saidas.find((s) => s.funcao === funcao) : undefined;
+
+/** Migra mapas antigos e mantém 8/2 portas nativas e 4/4 portas do expansor. */
+export function normalizarMapaIO(veiculo: string, mapa: MapaIO): MapaIO {
+  const cap = capacidadeDe(veiculo);
+  const entradasNativas = Array.from({ length: cap.entradas }, (_, i): EntradaIO => {
+    const padrao = sensoresPadraoIO[i];
+    const anterior = mapa.entradas.find((e) => e.id === `IN-${i + 1}` || e.canal === `IN${i + 1}` || e.canal === `IO${i + 1}`) ?? entradaPorFuncao(mapa, padrao?.funcao);
+    const funcao = anterior?.funcao ?? padrao?.funcao ?? null;
+    return { id: `IN-${i + 1}`, canal: `IN${i + 1}`, fonte: "nativo", nome: funcao ? sensorLabel[funcao] : "", funcao, polaridade: anterior?.polaridade ?? "baixa", debounceSeg: anterior?.debounceSeg ?? 0, habilitado: anterior?.habilitado ?? Boolean(padrao) };
+  });
+  const entradasExpansor = Array.from({ length: 4 }, (_, i): EntradaIO => {
+    const anterior = mapa.entradas.find((e) => e.id === `EXP-IN-${i + 1}` || e.canal === `EXP-IN${i + 1}` || (e.fonte === "expansor485" && mapa.entradas.filter((x) => x.fonte === "expansor485").indexOf(e) === i));
+    const funcao = anterior?.funcao && !entradasNativas.some((e) => e.funcao === anterior.funcao) ? anterior.funcao : null;
+    return { id: `EXP-IN-${i + 1}`, canal: `EXP-IN${i + 1}`, fonte: "expansor485", nome: funcao ? sensorLabel[funcao] : "", funcao, polaridade: anterior?.polaridade ?? "baixa", debounceSeg: anterior?.debounceSeg ?? 0, habilitado: funcao ? (anterior?.habilitado ?? true) : false };
+  });
+  const saidasNativas = Array.from({ length: cap.saidas }, (_, i): SaidaIO => {
+    const padrao = atuadoresPadraoIO[i];
+    const anterior = mapa.saidas.find((s) => s.id === `OUT-${i + 1}` || s.canal === `OUT${i + 1}`) ?? saidaPorFuncao(mapa, padrao?.funcao);
+    const funcao = anterior?.funcao ?? padrao?.funcao ?? null;
+    return { id: `OUT-${i + 1}`, canal: `OUT${i + 1}`, fonte: "nativo", nome: funcao ? atuadorLabel[funcao] : "", funcao, modoPadrao: anterior?.modoPadrao ?? "permanente", duracaoPadraoSeg: anterior?.duracaoPadraoSeg ?? 0, habilitado: anterior?.habilitado ?? Boolean(padrao) };
+  });
+  const funcoesExpansor = atuadoresPadraoIO.slice(cap.saidas, cap.saidas + 4);
+  const saidasExpansor = Array.from({ length: 4 }, (_, i): SaidaIO => {
+    const padrao = funcoesExpansor[i];
+    const anterior = mapa.saidas.find((s) => s.id === `EXP-OUT-${i + 1}` || s.canal === `EXP-OUT${i + 1}`) ?? saidaPorFuncao(mapa, padrao?.funcao);
+    const funcao = anterior?.funcao ?? padrao?.funcao ?? null;
+    return { id: `EXP-OUT-${i + 1}`, canal: `EXP-OUT${i + 1}`, fonte: "expansor485", nome: funcao ? atuadorLabel[funcao] : "", funcao, modoPadrao: anterior?.modoPadrao ?? "permanente", duracaoPadraoSeg: anterior?.duracaoPadraoSeg ?? 0, habilitado: anterior?.habilitado ?? Boolean(padrao) };
+  });
+  const satelite = mapa.seriais.find((s) => s.funcao === "satelite") ?? mapa.seriais.find((s) => s.porta === "RS232-1");
+  const lorawan = mapa.seriais.find((s) => s.funcao === "lorawan") ?? mapa.seriais.find((s) => s.porta === "RS232-2");
+  const expansor = mapa.seriais.find((s) => s.funcao === "expansor_io");
+  const rWatch = mapa.seriais.find((s) => s.funcao === "r_watch");
+  const seriais: PortaSerial[] = [
+    { id: "RS232-1-SAT", porta: "RS232-1", funcao: "satelite", observacao: "Terminal satelital", baudRate: satelite?.baudRate ?? 9600, habilitado: satelite?.habilitado ?? true },
+    { id: "RS232-2-LORA", porta: "RS232-2", funcao: "lorawan", observacao: "Terminal LoRaWAN", baudRate: lorawan?.baudRate ?? 9600, habilitado: lorawan?.habilitado ?? true },
+    { id: "RS485-EXP", porta: "RS485", funcao: "expansor_io", observacao: "Expansor de I/O", baudRate: expansor?.baudRate ?? rWatch?.baudRate ?? 115200, endereco: expansor?.endereco ?? 1, habilitado: expansor?.habilitado ?? Boolean(mapa.seriais.find((s) => s.funcao === "expansor_io")) },
+    { id: "RS485-RWATCH", porta: "RS485", funcao: "r_watch", observacao: "R-Watch", baudRate: rWatch?.baudRate ?? expansor?.baudRate ?? 115200, endereco: rWatch?.endereco ?? 2, habilitado: rWatch?.habilitado ?? false },
+  ];
+  const redesCAN: RedeCAN[] = mapa.redesCAN?.length ? mapa.redesCAN : [{ id: "CAN1", rede: "CAN1", protocolo: "j1939", habilitado: true }];
+  return { entradas: [...entradasNativas, ...entradasExpansor], saidas: [...saidasNativas, ...saidasExpansor], seriais, redesCAN };
+}
+
+export const expansorHabilitado = (mapa: MapaIO) => mapa.seriais.some((s) => s.funcao === "expansor_io" && s.habilitado !== false);
+
+/** O RS485 é endereçável: o conflito ocorre apenas quando dois periféricos usam o mesmo endereço. */
+export function seriaisEmConflito(mapa: MapaIO): PortaSerial[] {
+  const ocupadas = new Map<string, PortaSerial[]>();
+  for (const s of mapa.seriais.filter((x) => x.habilitado !== false && x.funcao !== "livre")) {
+    const chave = s.porta === "RS485" ? `${s.porta}:${s.endereco ?? "sem-endereco"}` : s.porta;
+    ocupadas.set(chave, [...(ocupadas.get(chave) ?? []), s]);
+  }
+  return Array.from(ocupadas.values()).filter((lista) => lista.length > 1).flat();
+}
+
+/** Funções de domínio que este veículo realmente tem — é o que o perfil pode referenciar. */
+export function funcoesDisponiveis(mapa: MapaIO): { sensores: Sensor[]; atuadores: Atuador[] } {
+  const expansorAtivo = expansorHabilitado(mapa);
+  return {
+    sensores: mapa.entradas.filter((e) => e.habilitado && e.funcao && (e.fonte !== "expansor485" || expansorAtivo)).map((e) => e.funcao as Sensor),
+    atuadores: mapa.saidas.filter((s) => s.habilitado && s.funcao && (s.fonte !== "expansor485" || expansorAtivo)).map((s) => s.funcao as Atuador),
+  };
+}
+
+function mapaIOBase(linha: Equipamento["linha"]): MapaIO {
+  const completo = linha !== "MDVR-4";
+  const entradas: EntradaIO[] = [
+    { id: "DI-1", canal: "DI-1", fonte: "nativo", nome: "Porta do baú", funcao: "porta_bau", polaridade: "baixa", debounceSeg: 2, habilitado: true },
+    { id: "DI-2", canal: "DI-2", fonte: "nativo", nome: "Porta da cabine", funcao: "porta_cabine", polaridade: "baixa", debounceSeg: 2, habilitado: true },
+    { id: "DI-3", canal: "DI-3", fonte: "nativo", nome: "Ignição", funcao: "ignicao", polaridade: "alta", debounceSeg: 1, habilitado: true },
+    { id: "DI-4", canal: "DI-4", fonte: "nativo", nome: "Painel do equipamento", funcao: "painel", polaridade: "baixa", debounceSeg: 0, habilitado: true },
+    { id: "CAN-VEL", canal: "velocidade", fonte: "can", nome: "Velocidade (CAN)", funcao: "velocidade", polaridade: "alta", debounceSeg: 0, habilitado: true },
+    { id: "CAN-MOV", canal: "movimento", fonte: "can", nome: "Movimento (CAN)", funcao: "movimento", polaridade: "alta", debounceSeg: 3, habilitado: true },
+  ];
+  if (completo) entradas.push({ id: "EXP-1", canal: "EXP-1", fonte: "expansor485", nome: "Sensor de engate", funcao: "engate", polaridade: "baixa", debounceSeg: 2, habilitado: true });
+
+  const saidas: SaidaIO[] = [
+    { id: "DO-1", canal: "DO-1", fonte: "nativo", nome: "Bloqueio de motor", funcao: "bloqueio_motor", modoPadrao: "permanente", duracaoPadraoSeg: 0, habilitado: true },
+    { id: "DO-2", canal: "DO-2", fonte: "nativo", nome: "Trava do baú", funcao: "trava_bau", modoPadrao: "permanente", duracaoPadraoSeg: 0, habilitado: true },
+  ];
+  if (completo) saidas.push(
+    { id: "DO-3", canal: "DO-3", fonte: "nativo", nome: "Sirene", funcao: "sirene", modoPadrao: "temporario", duracaoPadraoSeg: 30, habilitado: true },
+    { id: "DO-4", canal: "DO-4", fonte: "nativo", nome: "Luz de alerta", funcao: "luz_alerta", modoPadrao: "temporario", duracaoPadraoSeg: 60, habilitado: true },
+    { id: "EXP-DO-1", canal: "EXP-DO-1", fonte: "expansor485", nome: "Trava da quinta roda", funcao: "trava_quinta_roda", modoPadrao: "permanente", duracaoPadraoSeg: 0, habilitado: true },
+  );
+
+  const seriais: PortaSerial[] = completo
+    ? [
+        { id: "RS485-1", porta: "RS485", funcao: "expansor_io", observacao: "Expansor que serve EXP-1 e EXP-DO-1.", baudRate: 115200, endereco: 1 },
+        { id: "RS232-1", porta: "RS232-1", funcao: "satelite", observacao: "Terminal satelital — canal de contingência.", baudRate: 9600 },
+      ]
+    : [{ id: "RS485-1", porta: "RS485", funcao: "teclado", observacao: "Teclado do motorista.", baudRate: 115200, endereco: 3 }];
+
+  return { entradas, saidas, seriais, redesCAN: [{ id: "CAN1", rede: "CAN1", protocolo: "j1939", habilitado: true }] };
+}
+
 // ------------------------------------------------------------------ Validação
 
 export type Validacao = { nivel: "erro" | "aviso"; codigo: string; mensagem: string; macroId?: string };
@@ -348,6 +558,38 @@ export function validarConfiguracao(c: ConfiguracaoVeiculo): Validacao[] {
       }
     }
   }
+  // Coerência entre a política e o que o veículo realmente tem (mapa de I/O)
+  const mapaIO = normalizarMapaIO(c.veiculo, c.mapaIO);
+  const disponiveis = funcoesDisponiveis(mapaIO);
+  const cap = capacidadeDe(c.veiculo);
+  const perfis: { rotulo: string; macroId?: string; perfil: PerfilOperacional }[] = [
+    { rotulo: "perfil padrão", perfil: c.perfilPadrao },
+    ...c.macros.map((m) => ({ rotulo: `“${m.nome}”`, macroId: m.id, perfil: m.perfil })),
+  ];
+  for (const { rotulo, macroId, perfil } of perfis) {
+    for (const s of perfil.sensores.filter((x) => x.armado)) {
+      if (!disponiveis.sensores.includes(s.sensor)) {
+        achados.push({ nivel: "erro", codigo: "sensor-sem-canal", macroId, mensagem: `${rotulo} arma “${sensorLabel[s.sensor]}”, que não existe no mapa de I/O deste veículo.` });
+      }
+    }
+    for (const [chave, a] of Object.entries(perfil.atuadores) as [Atuador, ConfigAtuador][]) {
+      const usado = a.postura === "ligado" || a.liberavelPeloMotorista;
+      if (usado && !disponiveis.atuadores.includes(chave)) {
+        achados.push({ nivel: "erro", codigo: "atuador-sem-canal", macroId, mensagem: `${rotulo} usa ${atuadorLabel[chave].toLowerCase()}, que não existe no mapa de I/O deste veículo.` });
+      }
+    }
+  }
+  const nativasEntrada = c.mapaIO.entradas.filter((e) => e.fonte === "nativo").length;
+  const nativasSaida = c.mapaIO.saidas.filter((x) => x.fonte === "nativo").length;
+  if (nativasEntrada > cap.entradas) achados.push({ nivel: "erro", codigo: "entradas-acima-capacidade", mensagem: `${nativasEntrada} entradas nativas mapeadas, e o modelo aceita ${cap.entradas}.` });
+  if (nativasSaida > cap.saidas) achados.push({ nivel: "erro", codigo: "saidas-acima-capacidade", mensagem: `${nativasSaida} saídas nativas mapeadas, e o modelo aceita ${cap.saidas}.` });
+  for (const s of seriaisEmConflito(c.mapaIO)) {
+    achados.push({ nivel: "erro", codigo: "serial-em-conflito", mensagem: s.porta === "RS485" ? `O endereço ${s.endereco ?? "não informado"} da RS485 está repetido.` : `A porta ${s.porta} está alocada para mais de uma função.` });
+  }
+  if (!cap.verificado) {
+    achados.push({ nivel: "aviso", codigo: "capacidade-nao-verificada", mensagem: `Os limites deste modelo (${cap.entradas} entradas, ${cap.saidas} saídas) vieram de documentação e nunca foram conferidos no equipamento.` });
+  }
+
   if (!c.perfilPadrao.sensores.some((s) => s.armado)) {
     achados.push({ nivel: "aviso", codigo: "padrao-sem-sensor", mensagem: "O perfil padrão não tem sensor armado — entre um embarque e outro o veículo fica sem detecção." });
   }
@@ -575,23 +817,48 @@ export const catalogoMacros: { id: string; nome: string; descricao: string; tipo
 
 export const nomeMacro = (id: string) => catalogoMacros.find((m) => m.id === id)?.nome ?? id;
 
-export const configuracoesIniciais: ConfiguracaoVeiculo[] = [
-  { veiculo: "VTR-2048", frota: "Sul · Distribuição", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), macroVigente: "MC-INICIO", desde: "2026-09-08T11:42:00", versaoEmbarcada: 7, mudancas: [], sincronizadoEm: "2026-09-02T08:10:00", ultimoEmbarque: null },
-  { veiculo: "VTR-1783", frota: "Centro · Longa distância", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), macroVigente: "MC-CLIENTE-OUT", desde: "2026-09-08T09:15:00", versaoEmbarcada: 7, mudancas: [], sincronizadoEm: "2026-09-02T08:12:00", ultimoEmbarque: null },
-  { veiculo: "VTR-0931", frota: "Sudeste · Última milha", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), macroVigente: "MC-CLIENTE-IN", desde: "2026-09-08T13:58:00", versaoEmbarcada: 4,
+/**
+ * Poda a política ao que o veículo realmente tem.
+ *
+ * O molde de macros é o mesmo para toda a frota, mas o mapa de I/O não: um
+ * modelo reduzido não tem quinta roda nem sirene. Sem esta poda, o dado inicial
+ * já nasceria com erro de validação — e um erro semeado ensina o operador a
+ * ignorar o alerta.
+ */
+function ajustarPolitica(config: ConfiguracaoVeiculo): ConfiguracaoVeiculo {
+  const mapaIO = normalizarMapaIO(config.veiculo, config.mapaIO);
+  const { sensores, atuadores } = funcoesDisponiveis(mapaIO);
+  const podar = (perfil: PerfilOperacional): PerfilOperacional => ({
+    ...perfil,
+    sensores: perfil.sensores.filter((s) => sensores.includes(s.sensor)),
+    contingencia: { ...perfil.contingencia, sensores: perfil.contingencia.sensores.filter((x) => sensores.includes(x)) },
+    atuadores: Object.fromEntries((Object.keys(perfil.atuadores) as Atuador[]).map((a) => [
+      a,
+      atuadores.includes(a) ? perfil.atuadores[a] : { ...perfil.atuadores[a], postura: "desligado" as PosturaAtuador, liberavelPeloMotorista: false, limiteAcionamentos: null, exigeAutenticacao: false },
+    ])) as Record<Atuador, ConfigAtuador>,
+  });
+  return { ...config, mapaIO, perfilPadrao: podar(config.perfilPadrao), macros: config.macros.map((m) => ({ ...m, perfil: podar(m.perfil) })) };
+}
+
+const configuracoesBase: ConfiguracaoVeiculo[] = [
+  { veiculo: "VTR-2048", frota: "Sul · Distribuição", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-2048")!.linha), macroVigente: "MC-INICIO", desde: "2026-09-08T11:42:00", versaoEmbarcada: 7, mudancas: [], sincronizadoEm: "2026-09-02T08:10:00", ultimoEmbarque: null },
+  { veiculo: "VTR-1783", frota: "Centro · Longa distância", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-1783")!.linha), macroVigente: "MC-CLIENTE-OUT", desde: "2026-09-08T09:15:00", versaoEmbarcada: 7, mudancas: [], sincronizadoEm: "2026-09-02T08:12:00", ultimoEmbarque: null },
+  { veiculo: "VTR-0931", frota: "Sudeste · Última milha", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-0931")!.linha), macroVigente: "MC-CLIENTE-IN", desde: "2026-09-08T13:58:00", versaoEmbarcada: 4,
     mudancas: [
       { id: "MD-01", descricao: "Trava do baú passou a exigir credencial em “Chegada no cliente”", em: "2026-09-08T10:12:00", por: "Larissa Martins" },
       { id: "MD-02", descricao: "Sensor de movimento armado no perfil padrão", em: "2026-09-08T10:20:00", por: "Larissa Martins" },
     ],
     sincronizadoEm: "2026-08-23T07:40:00", ultimoEmbarque: null },
-  { veiculo: "VTR-3110", frota: "Sudeste · Operação", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), macroVigente: "MC-ABASTECIMENTO", desde: "2026-09-08T12:20:00", versaoEmbarcada: 2, mudancas: [], sincronizadoEm: "2026-09-05T14:00:00",
+  { veiculo: "VTR-3110", frota: "Sudeste · Operação", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-3110")!.linha), macroVigente: "MC-ABASTECIMENTO", desde: "2026-09-08T12:20:00", versaoEmbarcada: 2, mudancas: [], sincronizadoEm: "2026-09-05T14:00:00",
     ultimoEmbarque: { em: "2026-09-05T14:00:00", por: "Rafael Duarte", estado: "parcial", itens: [
       { id: "PADRAO", nome: "Perfil padrão · Padrão", estado: "aceito" },
       { id: "MC-PERNOITE", nome: "Pernoite · perfil Pernoite", estado: "rejeitado", motivo: "Equipamento MDVR-8 não tem a saída “trava da quinta roda” mapeada." },
       { id: "GRAFO", nome: "Sequência de macros · 23 transições", estado: "aceito" },
     ] } },
-  { veiculo: "VTR-2240", frota: "Sul · Distribuição", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), macroVigente: "MC-PERNOITE", desde: "2026-09-07T21:05:00", versaoEmbarcada: null, mudancas: [], sincronizadoEm: null, ultimoEmbarque: null },
+  { veiculo: "VTR-2240", frota: "Sul · Distribuição", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-2240")!.linha), macroVigente: "MC-PERNOITE", desde: "2026-09-07T21:05:00", versaoEmbarcada: null, mudancas: [], sincronizadoEm: null, ultimoEmbarque: null },
 ];
+
+export const configuracoesIniciais: ConfiguracaoVeiculo[] = configuracoesBase.map(ajustarPolitica);
 
 /** Macros que o motorista pode registrar estando na macro `atual` (`DEV-68`). */
 export function proximasMacros(config: ConfiguracaoVeiculo, atual: string | null): MacroVeiculo[] {

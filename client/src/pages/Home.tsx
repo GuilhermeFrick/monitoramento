@@ -64,7 +64,8 @@ import {
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
 import { equipamentoDe } from "./risk/domain";
 import { ProfilesView, useConfiguracoes } from "./risk/views/ProfilesView";
-import { VehicleNavigator } from "./risk/views/perfil/VehicleNavigator";
+import { VehicleNavigator, type ControleArvoreVeiculos, type EstadoArvoreVeiculos } from "./risk/views/perfil/VehicleNavigator";
+import { EquipmentConfigView } from "./risk/views/equipamento/EquipmentConfigView";
 import { ControlPointsView, usePontos } from "./risk/views/ControlPointsView";
 import { FencesView } from "./risk/views/FencesView";
 import { RoutesView } from "./risk/views/RoutesView";
@@ -74,7 +75,7 @@ import { EventsView } from "./risk/views/EventsView";
 import { MessagingPanel } from "./risk/views/MessagingPanel";
 import { CommandModal } from "./risk/views/CommandModal";
 
-type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
+type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
 
 type Risk = {
   id: string;
@@ -117,6 +118,7 @@ const navGroups: { label: string; items: { id: ViewKey; label: string; icon: Ico
   ] },
   { label: "Regras e geocercas", items: [
     { id: "profiles", label: "Perfil operacional", icon: Layers },
+    { id: "equipment", label: "Configuração do equipamento", icon: SlidersHorizontal },
     { id: "controlpoints", label: "Pontos de controle e rotograma", icon: MapPinned },
     { id: "fences", label: "Cercas", icon: Globe2 },
     { id: "routes", label: "Rotas", icon: Waypoints },
@@ -179,8 +181,8 @@ function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen }: { active
   );
 }
 
-function Topbar({ title, onSearch, onToast }: { title: string; onSearch: (value: string) => void; onToast: (message: string) => void }) {
-  return <header className="topbar">
+function Topbar({ title, onSearch, onToast, compact = false }: { title: string; onSearch: (value: string) => void; onToast: (message: string) => void; compact?: boolean }) {
+  return <header className={`topbar ${compact ? "compact" : ""}`}>
     <div className="breadcrumb"><span>Avansat Risk</span><ChevronRight size={12} /><strong>{title}</strong></div>
     <div className="top-actions">
       <label className="search-box"><Search size={14} /><input aria-label="Buscar" placeholder="Buscar veículo, motorista..." onChange={(event) => onSearch(event.target.value)} /></label>
@@ -322,6 +324,12 @@ function MainApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [configs, setConfigs] = useConfiguracoes();
+  // Compartilhada entre Perfil operacional e Configuração do equipamento: são
+  // duas vistas da mesma política embarcada, e alternar não pode perder o veículo.
+  const [veiculoSelecionado, setVeiculoSelecionado] = useState(configs[0]?.veiculo ?? "");
+  const veiculo = { atual: veiculoSelecionado, selecionar: setVeiculoSelecionado };
+  const [estadoArvore, setEstadoArvore] = useState<EstadoArvoreVeiculos>({ painelRecolhido: false, frotasRecolhidas: [], buscaAberta: false, scrollTop: 0 });
+  const arvore: ControleArvoreVeiculos = { estado: estadoArvore, atualizar: setEstadoArvore };
   const [pontos, setPontos] = usePontos();
   const title = useMemo(() => [...navGroups.flatMap((g) => g.items), { id: "settings", label: "Configurações" }].find((item) => item.id === activeView)?.label ?? "Visão geral", [activeView]);
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3000); };
@@ -337,14 +345,16 @@ function MainApp() {
     : activeView === "realtime" ? <RealtimeView onSelectRisk={openRisk} onToast={notify} onCommand={openCommand} />
     : activeView === "evidence" ? <EvidenceView onToast={notify} />
     : activeView === "reports" ? <ReportsView onToast={notify} />
-    : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
+    : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
+    : activeView === "equipment" ? <EquipmentConfigView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
     : activeView === "controlpoints" ? <ControlPointsView pontos={pontos} setPontos={setPontos} onToast={notify} />
     : activeView === "fences" ? <FencesView onToast={notify} />
     : activeView === "routes" ? <RoutesView onToast={notify} onGoRotograma={() => chooseView("controlpoints")} />
     : activeView === "provisioning" ? <ProvisioningView pontos={pontos} onToast={notify} />
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;
-  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><Sidebar active={activeView} onSelect={chooseView} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((atual) => !atual)} mobileOpen={sidebarOpen} /><div className="main-area">{activeView === "profiles" ? null : <Topbar title={title} onSearch={setSearch} onToast={notify} />}<main className={activeView === "profiles" ? "content content-workspace fullscreen" : "content"}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
+  const emWorkspace = activeView === "profiles" || activeView === "equipment";
+  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><Sidebar active={activeView} onSelect={chooseView} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((atual) => !atual)} mobileOpen={sidebarOpen} /><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} compact /><main className={emWorkspace ? "content content-workspace profile-topbar" : "content"}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
 }
 
 export default function Home() {

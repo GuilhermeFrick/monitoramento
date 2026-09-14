@@ -8,24 +8,31 @@ import {
 import { MacroGraphCanvas, organizarMacros, type MacroCatalogo, type SelecaoGrafo, type TipoLayoutMacro } from "./MacroGraphCanvas";
 import { ProfileInspector, type AbaInspetor } from "./ProfileInspector";
 import { DeployReviewDialog, type FaseEmbarque } from "./DeployDialogs";
+import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./VehicleNavigator";
 
 const OPERADOR = "Larissa Martins";
 
 export function useConfiguracoes() { return useStoredState<ConfiguracaoVeiculo[]>(STORAGE.configuracoes, configuracoesIniciais); }
 
-export function ProfileWorkspace({ configs, setConfigs, busca, onBusca, onLimparBusca, onToast, VehicleNavigator }: {
+export function ProfileWorkspace({ configs, setConfigs, veiculo: veiculoExterno, arvore, busca, onBusca, onLimparBusca, onToast, VehicleNavigator }: {
   configs: ConfiguracaoVeiculo[];
   setConfigs: (next: ConfiguracaoVeiculo[] | ((c: ConfiguracaoVeiculo[]) => ConfiguracaoVeiculo[])) => void;
+  /** Seleção compartilhada com a Configuração do equipamento — trocar de módulo não perde o veículo. */
+  veiculo?: { atual: string; selecionar: (v: string) => void };
+  arvore?: ControleArvoreVeiculos;
   busca: string;
   onBusca: (valor: string) => void;
   onLimparBusca: () => void;
   onToast: (m: string) => void;
-  VehicleNavigator: React.ComponentType<{ configs: ConfiguracaoVeiculo[]; selecionado: string; busca: string; onBusca: (valor: string) => void; onLimparBusca: () => void; onSelecionar: (v: string) => void; recolhido?: boolean; onAlternar?: () => void }>;
+  VehicleNavigator: React.ComponentType<VehicleNavigatorProps>;
 }) {
-  const [veiculo, setVeiculo] = useState(configs[0]?.veiculo ?? "");
+  const [veiculoLocal, setVeiculoLocal] = useState(configs[0]?.veiculo ?? "");
+  const veiculo = veiculoExterno?.atual ?? veiculoLocal;
+  const setVeiculo = veiculoExterno?.selecionar ?? setVeiculoLocal;
   const [selecao, setSelecao] = useState<SelecaoGrafo>({ tipo: "padrao" });
   const [aba, setAba] = useState<AbaInspetor>("estado");
-  const [navegadorRecolhido, setNavegadorRecolhido] = useState(false);
+  const [navegadorRecolhidoLocal, setNavegadorRecolhidoLocal] = useState(false);
+  const navegadorRecolhido = arvore?.estado.painelRecolhido ?? navegadorRecolhidoLocal;
   const [inspetorAberto, setInspetorAberto] = useState(false);
   const [novaMacro, setNovaMacro] = useState(false);
   const [confirmacao, setConfirmacao] = useState<{ titulo: string; corpo: string; acao: () => void } | null>(null);
@@ -139,7 +146,7 @@ export function ProfileWorkspace({ configs, setConfigs, busca, onBusca, onLimpar
 
   return <div className="wsp">
     <div className={`wsp-corpo ${inspetorAberto ? "" : "sem-inspetor"} ${navegadorRecolhido ? "nav-recolhida" : ""}`}>
-      <VehicleNavigator configs={configs} selecionado={config.veiculo} busca={busca} onBusca={onBusca} onLimparBusca={onLimparBusca} recolhido={navegadorRecolhido} onAlternar={() => setNavegadorRecolhido((atual) => !atual)} onSelecionar={(v) => { setVeiculo(v); setSelecao({ tipo: "padrao" }); setInspetorAberto(false); }} />
+      <VehicleNavigator configs={configs} selecionado={config.veiculo} busca={busca} onBusca={onBusca} onLimparBusca={onLimparBusca} recolhido={navegadorRecolhido} arvore={arvore} onAlternar={() => setNavegadorRecolhidoLocal((atual) => !atual)} onSelecionar={(v) => { setVeiculo(v); setSelecao({ tipo: "padrao" }); setInspetorAberto(false); }} />
 
       <MacroGraphCanvas
         config={config} selecao={selecao} validacoes={validacoes}
