@@ -62,6 +62,8 @@ import {
   Waypoints,
   Moon,
   Sun,
+  Maximize2,
+  WifiOff,
 } from "lucide-react";
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
 import { equipamentoDe, newId, type ConfiguracaoVeiculo } from "./risk/domain";
@@ -81,6 +83,7 @@ import { JourneyView } from "./risk/views/JourneyView";
 import { MessagingPanel } from "./risk/views/MessagingPanel";
 import { CommandModal } from "./risk/views/CommandModal";
 import { RiskKanbanView, type AlertRisk } from "./risk/views/RiskKanbanView";
+import { TvDashboardPage } from "./risk/views/TvDashboardPage";
 
 type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "journey" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
 
@@ -232,13 +235,18 @@ function FleetTable({ search, onSelectRisk }: { search: string; onSelectRisk: (r
 }
 
 function Dashboard({ search, onSelectRisk, onToast, onNavigate }: { search: string; onSelectRisk: (risk: Risk) => void; onToast: (message: string) => void; onNavigate: (view: ViewKey) => void }) {
+  const openTvMode = () => {
+    const popup = window.open(`${window.location.origin}${window.location.pathname}?display=tv`, "avansat-tv-dashboard", "popup=yes,width=1920,height=1080");
+    if (popup) { popup.focus(); onToast("Modo TV aberto em uma nova janela."); }
+    else onToast("O navegador bloqueou a janela. Permita pop-ups para abrir o Modo TV.");
+  };
   return <>
     <div className="dashboard-context" aria-label="Contexto dos indicadores">
       <h1 className="visually-hidden">Visão geral</h1>
       <span className="dashboard-live"><i /> Operação atualizada <small>há 18s</small></span>
-      <time dateTime="2026-09-08"><CalendarDays size={13} /> 08 set 2026</time>
+      <div className="dashboard-context-actions"><time dateTime="2026-09-08"><CalendarDays size={13} /> 08 set 2026</time><button className="dashboard-tv-button" onClick={openTvMode}><Maximize2 size={13} /> Modo TV</button></div>
     </div>
-    <div className="kpi-grid"><KpiCard label="Score de segurança" value="78 / 100" meta="4,2% vs. semana anterior" icon={CircleGauge} trend="up" /><KpiCard label="Riscos ativos" value="12" meta="3 críticos aguardando ação" icon={ShieldAlert} tone="red" trend="down" /><KpiCard label="Veículos conectados" value="184 / 192" meta="95,8% da frota online" icon={Radio} trend="up" /><KpiCard label="Tempo médio de resposta" value="04:38" meta="18% mais rápido" icon={Clock3} trend="up" /></div>
+    <div className="kpi-grid"><KpiCard label="Score de segurança" value="78 / 100" meta="4,2% vs. semana anterior" icon={CircleGauge} trend="up" /><KpiCard label="Riscos ativos" value="12" meta="3 críticos aguardando ação" icon={ShieldAlert} tone="red" trend="down" /><KpiCard label="Veículos online" value="184" meta="95,8% da frota conectada" icon={Radio} trend="up" /><KpiCard label="Veículos offline" value="08" meta="4,2% sem comunicação" icon={WifiOff} tone="red" trend="down" /><KpiCard label="Tempo médio de resposta" value="04:38" meta="18% mais rápido" icon={Clock3} trend="up" /></div>
     <div className="grid-2-1"><div className="panel animate-rise animate-delay-1"><div className="panel-header"><div><div className="panel-title">Tendência de risco operacional</div><div className="panel-subtitle">Score consolidado da frota · últimos 6 dias</div></div><div className="chart-legend"><span className="legend-item"><i className="legend-dot" /> Score atual</span><span className="legend-item"><i className="legend-dot alt" /> Meta 80</span></div></div><RiskChart /></div><div className="panel animate-rise animate-delay-2"><div className="panel-header"><div><div className="panel-title">Saúde da operação</div><div className="panel-subtitle">Distribuição por criticidade</div></div><button className="panel-link" onClick={() => onSelectRisk(initialRisks[0])}>Detalhar</button></div><div className="risk-summary"><div className="score-ring"><div>78</div></div><div><div className="score-label">Score geral</div><div className="score-title">Operação controlada</div><div className="score-context">+4,2% de evolução no período</div></div></div><div className="risk-bars"><div className="risk-row"><span>Baixo risco</span><strong>142</strong><div className="bar"><span style={{ width: "76%" }} /></div></div><div className="risk-row"><span>Risco moderado</span><strong>31</strong><div className="bar warn"><span style={{ width: "28%" }} /></div></div><div className="risk-row"><span>Alto risco</span><strong>11</strong><div className="bar danger"><span style={{ width: "11%" }} /></div></div></div></div></div>
     <div className="grid-2-1"><MapPanel onSelectRisk={onSelectRisk} /><FeedPanel onSelectRisk={onSelectRisk} onViewAll={() => onNavigate("events")} /></div>
     <FleetTable search={search} onSelectRisk={onSelectRisk} />
@@ -509,5 +517,7 @@ function MainApp() {
 
 export default function Home() {
   const displayMode = new URLSearchParams(window.location.search).get("display");
-  return displayMode === "mosaic" ? <MosaicExternalPage /> : <MainApp />;
+  if (displayMode === "mosaic") return <MosaicExternalPage />;
+  if (displayMode === "tv") return <TvDashboardPage />;
+  return <MainApp />;
 }
