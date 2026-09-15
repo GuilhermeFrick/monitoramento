@@ -60,9 +60,13 @@ import {
   MessageSquare,
   Terminal,
   Waypoints,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
 import { equipamentoDe, newId } from "./risk/domain";
+import { useContext } from "react";
+import { ThemeContext } from "../contexts/ThemeContext";
 import { ProfilesView, useConfiguracoes } from "./risk/views/ProfilesView";
 import { VehicleNavigator, type ControleArvoreVeiculos, type EstadoArvoreVeiculos } from "./risk/views/perfil/VehicleNavigator";
 import { EquipmentConfigView } from "./risk/views/equipamento/EquipmentConfigView";
@@ -181,11 +185,32 @@ function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen }: { active
   );
 }
 
+/**
+ * Alternar claro e escuro.
+ *
+ * Lê o contexto direto em vez de `useTheme` porque aquele lança quando não há
+ * provedor, e a Topbar também é renderizada em teste de fumaça no servidor.
+ * Sem provedor o botão simplesmente não aparece.
+ */
+function AlternarTema() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx?.toggleTheme) return null;
+  const escuro = ctx.theme === "dark";
+  return <button
+    className="icon-btn"
+    aria-label={escuro ? "Mudar para o modo claro" : "Mudar para o modo escuro"}
+    title={escuro ? "Modo claro" : "Modo escuro"}
+    aria-pressed={escuro}
+    onClick={ctx.toggleTheme}
+  >{escuro ? <Sun size={15} /> : <Moon size={15} />}</button>;
+}
+
 function Topbar({ title, onSearch, onToast, compact = false }: { title: string; onSearch: (value: string) => void; onToast: (message: string) => void; compact?: boolean }) {
   return <header className={`topbar ${compact ? "compact" : ""}`}>
     <div className="breadcrumb"><span>Avansat Risk</span><ChevronRight size={12} /><strong>{title}</strong></div>
     <div className="top-actions">
       <label className="search-box"><Search size={14} /><input aria-label="Buscar" placeholder="Buscar veículo, motorista..." onChange={(event) => onSearch(event.target.value)} /></label>
+      <AlternarTema />
       <button className="icon-btn" aria-label="Ajuda" onClick={() => onToast("Central de ajuda disponível em breve.")}><LifeBuoy size={15} /></button>
       <button className="icon-btn" aria-label="Notificações" onClick={() => onToast("Você tem 12 riscos aguardando tratamento.")}><Bell size={15} /><span className="notification-dot" /></button>
       <div className="avatar" title="User Teste">UT</div>
@@ -224,7 +249,7 @@ function Dashboard({ search, onSelectRisk, onToast, onNavigate }: { search: stri
 function RisksView({ risks, search, onSelectRisk, onCommand }: { risks: Risk[]; search: string; onSelectRisk: (risk: Risk) => void; onCommand: (vehicle: string) => void }) {
   const [severity, setSeverity] = useState("all");
   const filtered = risks.filter((risk) => (severity === "all" || risk.severity === severity) && `${risk.title} ${risk.vehicle} ${risk.driver}`.toLowerCase().includes(search.toLowerCase()));
-  return <><PageHeader eyebrow="Orquestração de risco" title="Riscos em tempo real" description="Priorize eventos ativos, delegue ou envie comandos ao veículo e acompanhe a eficácia de cada resposta." action="Comandos ao veículo" actionIcon={Terminal} onAction={() => onCommand(filtered[0]?.vehicle ?? initialRisks[0].vehicle)} /><div className="risk-page-grid"><div className="panel" style={{ padding: 0 }}><div className="toolbar"><div className="filters"><button className="secondary-btn"><Filter size={13} /> Filtros</button><select className="filter-select" value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">Todas as criticidades</option><option value="high">Alta criticidade</option><option value="medium">Média criticidade</option><option value="low">Baixa criticidade</option></select><select className="filter-select"><option>Todos os status</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select></div><span style={{ fontSize: 10, color: "#84909d" }}>{filtered.length} eventos encontrados</span></div><div className="risk-list">{filtered.map((risk) => <button className="risk-list-item" key={risk.id} onClick={() => onSelectRisk(risk)}><span className={`risk-severity ${risk.severity === "medium" ? "amber" : risk.severity === "low" ? "teal" : ""}`} /><span><span className="risk-list-title">{risk.title}</span><span className="risk-list-desc">{risk.detail}</span><span className="risk-list-meta"><span>{risk.vehicle}</span><span>{risk.driver}</span><span>{risk.time}</span></span></span><span className="risk-score"><span className="risk-score-num">{risk.score}</span><span className="risk-score-label">score</span></span></button>)}{filtered.length === 0 ? <div className="empty-note"><div className="empty-icon"><ShieldCheck size={18} /></div>Nenhum risco corresponde aos filtros.</div> : null}</div></div><div className="panel page-panel"><div className="panel-header"><div><div className="panel-title">Eficiência dos comandos</div><div className="panel-subtitle">Últimos 30 dias</div></div><button className="panel-link" onClick={() => undefined}>Relatório</button></div><div className="report-cards"><div className="report-card"><div className="label">Resolvidos no SLA</div><div className="num">94%</div><div className="sub">+6,8% no período</div></div><div className="report-card"><div className="label">Reincidência</div><div className="num">8,2%</div><div className="sub" style={{ color: "#d1635c" }}>−2,1% no período</div></div><div className="report-card"><div className="label">Botões acionados pelo motorista</div><div className="num">218</div><div className="sub">de 231 habilitados</div></div></div><div className="detail-section"><div className="detail-label">Resposta por categoria</div><div className="risk-bars"><div className="risk-row"><span>Comportamento</span><strong>96%</strong><div className="bar"><span style={{ width: "96%" }} /></div></div><div className="risk-row"><span>Dinâmica veicular</span><strong>91%</strong><div className="bar"><span style={{ width: "91%" }} /></div></div><div className="risk-row"><span>Integridade MDVR</span><strong>88%</strong><div className="bar warn"><span style={{ width: "88%" }} /></div></div></div></div></div></div></>;
+  return <><PageHeader eyebrow="Orquestração de risco" title="Riscos em tempo real" description="Priorize eventos ativos, delegue ou envie comandos ao veículo e acompanhe a eficácia de cada resposta." action="Comandos ao veículo" actionIcon={Terminal} onAction={() => onCommand(filtered[0]?.vehicle ?? initialRisks[0].vehicle)} /><div className="risk-page-grid"><div className="panel" style={{ padding: 0 }}><div className="toolbar"><div className="filters"><button className="secondary-btn"><Filter size={13} /> Filtros</button><select className="filter-select" value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">Todas as criticidades</option><option value="high">Alta criticidade</option><option value="medium">Média criticidade</option><option value="low">Baixa criticidade</option></select><select className="filter-select"><option>Todos os status</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select></div><span style={{ fontSize: 10, color: "var(--n-6)" }}>{filtered.length} eventos encontrados</span></div><div className="risk-list">{filtered.map((risk) => <button className="risk-list-item" key={risk.id} onClick={() => onSelectRisk(risk)}><span className={`risk-severity ${risk.severity === "medium" ? "amber" : risk.severity === "low" ? "teal" : ""}`} /><span><span className="risk-list-title">{risk.title}</span><span className="risk-list-desc">{risk.detail}</span><span className="risk-list-meta"><span>{risk.vehicle}</span><span>{risk.driver}</span><span>{risk.time}</span></span></span><span className="risk-score"><span className="risk-score-num">{risk.score}</span><span className="risk-score-label">score</span></span></button>)}{filtered.length === 0 ? <div className="empty-note"><div className="empty-icon"><ShieldCheck size={18} /></div>Nenhum risco corresponde aos filtros.</div> : null}</div></div><div className="panel page-panel"><div className="panel-header"><div><div className="panel-title">Eficiência dos comandos</div><div className="panel-subtitle">Últimos 30 dias</div></div><button className="panel-link" onClick={() => undefined}>Relatório</button></div><div className="report-cards"><div className="report-card"><div className="label">Resolvidos no SLA</div><div className="num">94%</div><div className="sub">+6,8% no período</div></div><div className="report-card"><div className="label">Reincidência</div><div className="num">8,2%</div><div className="sub" style={{ color: "#d1635c" }}>−2,1% no período</div></div><div className="report-card"><div className="label">Botões acionados pelo motorista</div><div className="num">218</div><div className="sub">de 231 habilitados</div></div></div><div className="detail-section"><div className="detail-label">Resposta por categoria</div><div className="risk-bars"><div className="risk-row"><span>Comportamento</span><strong>96%</strong><div className="bar"><span style={{ width: "96%" }} /></div></div><div className="risk-row"><span>Dinâmica veicular</span><strong>91%</strong><div className="bar"><span style={{ width: "91%" }} /></div></div><div className="risk-row"><span>Integridade MDVR</span><strong>88%</strong><div className="bar warn"><span style={{ width: "88%" }} /></div></div></div></div></div></div></>;
 }
 
 function MosaicDisplay({ vehicles, external = false }: { vehicles: typeof fleetRows; external?: boolean }) {

@@ -8,7 +8,9 @@ interface ThemeContextType {
   switchable: boolean;
 }
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+/** Exportado para leitura defensiva: `useTheme` lança sem provedor, e a Topbar
+ * também renderiza no servidor nos testes de fumaça. */
+export const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 interface ThemeProviderProps {
   children: React.ReactNode;
