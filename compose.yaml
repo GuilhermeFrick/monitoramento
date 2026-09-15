@@ -2,9 +2,13 @@ services:
   app:
     build:
       context: .
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
     ports:
       - "${APP_PORT:-3001}:3000"
     environment:
       NODE_ENV: production
       PORT: 3000
+      OPENROUTESERVICE_API_KEY: eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZiZjk3MGYzZTAwOTQwYWU5ZDMzZTI5YmIyYTk4N2ZjIiwiaCI6Im11cm11cjY0In0=
     restart: unless-stopped

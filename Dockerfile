@@ -16,6 +16,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+ARG VITE_MAP_TILE_URL
+ARG VITE_MAP_ATTRIBUTION
 RUN pnpm build
 
 FROM node:24-alpine AS runtime

@@ -1013,7 +1013,7 @@ export type NivelDesvio = "no_prazo" | "adiantada" | "muito_adiantada" | "atrasa
 export const nivelDesvioLabel: Record<NivelDesvio, string> = { no_prazo: "No prazo", adiantada: "Adiantada", muito_adiantada: "Muito adiantada", atrasada: "Atrasada", muito_atrasada: "Muito atrasada" };
 export const nivelDesvioTone: Record<NivelDesvio, "teal" | "blue" | "amber" | "red" | "neutral"> = { no_prazo: "teal", adiantada: "blue", muito_adiantada: "amber", atrasada: "amber", muito_atrasada: "red" };
 
-export type Trecho = { id: string; de: string; para: string; duracaoMin: number; distanciaKm: number; limites: { velocidadeKmh: number; paradaMaxMin: number; direcaoContinuaMaxMin: number } };
+export type Trecho = { id: string; de: string; para: string; duracaoMin: number; distanciaKm: number; vertices?: LatLng[]; limites: { velocidadeKmh: number; paradaMaxMin: number; direcaoContinuaMaxMin: number } };
 
 /**
  * De onde veio o traçado da jornada.
@@ -1030,23 +1030,16 @@ export type Trecho = { id: string; de: string; para: string; duracaoMin: number;
 export type FonteTracado =
   | { tipo: "catalogo"; rotaId: string; em: string }
   | { tipo: "importacao"; arquivo: string; formato: FormatoImportacao; verticesOriginais: number; em: string }
-  | { tipo: "roteirizacao"; provedor: string; perfil: PerfilRoteirizacao; em: string };
+  | { tipo: "roteirizacao"; provedor: string; perfil: PerfilRoteirizacao; em: string; modo?: "real"; avisos?: string[]; waypoints?: import("@shared/roteirizacao").WaypointRoteiro[] };
 
 export type FormatoImportacao = "gpx" | "kml" | "geojson";
 
 /** O que se pede ao roteirizador. Um caminhão não faz o mesmo caminho que uma van. */
-export type PerfilRoteirizacao = {
-  veiculo: "van" | "caminhao" | "carreta";
-  evitarPedagio: boolean;
-  evitarBalsa: boolean;
-  evitarViaNaoPavimentada: boolean;
-  /** Restrições físicas que o provedor usa para descartar vias. */
-  alturaM: number;
-  pesoT: number;
-};
+export type PerfilRoteirizacao = import("@shared/roteirizacao").PerfilRoteirizacao;
 
 export const perfilRoteirizacaoPadrao: PerfilRoteirizacao = {
-  veiculo: "caminhao", evitarPedagio: false, evitarBalsa: true, evitarViaNaoPavimentada: true, alturaM: 4.4, pesoT: 23,
+  veiculo: "caminhao", evitarPedagio: false, evitarBalsa: true, evitarViaNaoPavimentada: false, alturaM: 4.4, pesoT: 23,
+  larguraM: 2.6, comprimentoM: 14, cargaEixoT: 10, cargaPerigosa: false,
 };
 
 export const veiculoRoteirizacaoLabel: Record<PerfilRoteirizacao["veiculo"], string> = {
@@ -1058,6 +1051,10 @@ export const fonteTracadoLabel: Record<FonteTracado["tipo"], string> = {
 };
 
 export type Rotograma = {
+  rascunho?: boolean;
+  publicadoEm?: string;
+  /** Snapshot publicado: editar o rascunho não altera a versão liberada. */
+  publicado?: { tracado: GeometriaLinha | null; fonte: FonteTracado | null; trechos: Trecho[]; pontos: PontoDeControle[]; versao: number };
   id: string;
   nome: string;
   veiculo: string;

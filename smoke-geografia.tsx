@@ -17,7 +17,6 @@ const { VehicleNavigator } = await import("./client/src/pages/risk/views/perfil/
 const d = await import("./client/src/pages/risk/domain");
 const g = await import("./client/src/pages/risk/mapa/geometria");
 const imp = await import("./client/src/pages/risk/mapa/importarTracado");
-const rot = await import("./client/src/pages/risk/mapa/roteirizador");
 const { TracadoDialog } = await import("./client/src/pages/risk/views/TracadoDialog");
 
 let ok = true;
@@ -100,17 +99,16 @@ try {
   falhar("formato desconhecido deveria ser recusado");
 } catch (e) { console.log(`  ok [importar] formato desconhecido recusado: ${(e as Error).message.slice(0, 40)}…`); }
 
-// O roteirizador é stub, e o que precisa estar certo é o contrato: uma perna por
-// par de paradas, e o aviso de que não é roteirização real sempre presente.
+// Ausência de credencial deve ser explícita e nunca gerar caminho de demonstração.
 try {
-  const paradas = ["PC-003", "PC-005", "PC-001"].map((id) => g.centroDe(d.pontosIniciais.find((p) => p.id === id)!.geometria));
-  const resposta = await rot.roteirizar({ paradas, perfil: d.perfilRoteirizacaoPadrao, corredorM: 300 });
-  if (resposta.pernas.length !== paradas.length - 1) falhar(`esperava ${paradas.length - 1} pernas, veio ${resposta.pernas.length}`);
-  else if (!resposta.aviso) falhar("roteirização de demonstração precisa devolver aviso, senão passa por real");
-  else if (resposta.geometria.vertices.length < paradas.length) falhar("traçado com menos vértices que paradas");
-  else if (resposta.pernas.some((perna) => perna.distanciaKm <= 0 || perna.duracaoMin <= 0)) falhar("perna sem distância ou duração");
-  else console.log(`  ok [roteirizar] ${resposta.pernas.length} pernas, ${resposta.geometria.vertices.length} vértices, aviso presente`);
-} catch (e) { falhar(`roteirizar: ${(e as Error).message}`); }
+  const { calcularRota } = await import("./server/routing/service");
+  const waypoints = ["PC-003", "PC-001"].map(id => ({ id, nome: id, tipo: "parada" as const, coordenada: g.centroDe(d.pontosIniciais.find(p => p.id === id)!.geometria) }));
+  await calcularRota({ waypoints, perfil: d.perfilRoteirizacaoPadrao, corredorM: 300 }, undefined, { apiKey: "" });
+  falhar("roteirizar sem credencial deveria ser recusado");
+} catch (e) {
+  if (e instanceof Error && "codigo" in e && e.codigo === "NAO_CONFIGURADO") console.log("  ok [roteirizar] sem credencial não produz rota simulada");
+  else falhar(`roteirizar: ${(e as Error).message}`);
+}
 
 console.log(ok ? "\nOK — geografia operacional renderiza e respeita as restrições do equipamento" : "\nfalhou");
 process.exit(ok ? 0 : 1);

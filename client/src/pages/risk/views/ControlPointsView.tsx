@@ -11,6 +11,7 @@ import { MapaGeo, type FormaMapa } from "../mapa/MapaGeo";
 import { PainelRecolhivel } from "../mapa/PainelRecolhivel";
 import { TracadoDialog, ResumoFonte, type TracadoEscolhido } from "./TracadoDialog";
 import { BarraFerramentas, EditorGeometria } from "../mapa/EditorGeometria";
+import { gerarTrechos, motivoBloqueioPublicacao } from "../mapa/rotograma";
 import { centroDe, medidaDe, paresSobrepostos } from "../mapa/geometria";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./perfil/VehicleNavigator";
 
@@ -71,9 +72,10 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
     const afetados = veiculosDoPonto(id);
     if (afetados.length) onRascunho?.(afetados, `${descricao} · ${nomePonto(id, pontos)}`);
   };
+  const snapshot = (r: Rotograma) => r.publicado ?? { tracado: r.tracado, fonte: r.fonte, trechos: r.trechos, pontos: pontos.filter(p => r.trechos.some(t => t.de === p.id || t.para === p.id)), versao: r.versao };
   const patchTrecho = (id: string, fn: (t: Trecho) => Trecho) => {
     if (!rotograma) return;
-    setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, trechos: r.trechos.map((t) => t.id === id ? fn(t) : t) } : r));
+    setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, publicado: snapshot(r), rascunho: true, trechos: r.trechos.map((t) => t.id === id ? fn(t) : t) } : r));
     onRascunho?.([rotograma.veiculo], `Limites do trecho ajustados · ${rotograma.id}`);
   };
   /**
@@ -85,21 +87,10 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
     if (!rotograma) return;
     setRotogramas((atuais) => atuais.map((r) => {
       if (r.id !== rotograma.id) return r;
-      const trechos = escolha.paradas && escolha.pernas
-        ? escolha.paradas.slice(0, -1).map((de, i) => {
-            const para = escolha.paradas![i + 1];
-            const anterior = r.trechos.find((t) => t.de === de && t.para === para) ?? r.trechos[i];
-            return {
-              id: anterior?.id ?? `T${i + 1}`,
-              de, para,
-              distanciaKm: escolha.pernas![i].distanciaKm,
-              duracaoMin: escolha.pernas![i].duracaoMin,
-              limites: anterior?.limites ?? { velocidadeKmh: 80, paradaMaxMin: 15, direcaoContinuaMaxMin: 240 },
-            };
-          })
-        : r.trechos;
-      return { ...r, tracado: escolha.tracado, fonte: escolha.fonte, rota: escolha.rotaId, trechos, trechoAtual: Math.min(r.trechoAtual, Math.max(0, trechos.length - 1)) };
+      const trechos = escolha.paradas && escolha.pernas ? gerarTrechos(escolha.paradas, escolha.pernas, r.trechos) : r.trechos;
+      return { ...r, publicado: snapshot(r), rascunho: true, tracado: escolha.tracado, fonte: escolha.fonte, rota: escolha.rotaId, trechos, trechoAtual: Math.min(r.trechoAtual, Math.max(0, trechos.length - 1)) };
     }));
+    if (escolha.novosPontos?.length) setPontos(atuais => [...atuais, ...escolha.novosPontos!.filter(p => !atuais.some(a => a.id === p.id))]);
     setShowTracado(false);
     onRascunho?.([rotograma.veiculo], `Traçado da jornada redefinido · ${rotograma.id}`);
     onToast(escolha.fonte.tipo === "roteirizacao"
@@ -109,8 +100,13 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
 
   const publicar = () => {
     if (!rotograma) return;
-    setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, versao: r.versao + 1 } : r));
-    onToast(`Rotograma de ${config.veiculo} publicado como v${rotograma.versao + 1}.`);
+    const motivo = motivoBloqueioPublicacao(rotograma);
+    if (motivo) { onToast(motivo); return; }
+    const usados = new Set(rotograma.trechos.flatMap(t => [t.de, t.para]));
+    const conflito = semPrecedencia.some(({ a, b }) => usados.has(a.id) || usados.has(b.id));
+    if (conflito) { onToast("Resolva as sobreposições dos pontos desta viagem antes de publicar."); return; }
+    setRotogramas((atuais) => atuais.map((r) => r.id === rotograma.id ? { ...r, rascunho: false, publicadoEm: new Date().toISOString(), versao: r.versao + 1, publicado: { tracado: r.tracado, fonte: r.fonte, trechos: r.trechos, pontos: pontos.filter(p => usados.has(p.id)), versao: r.versao + 1 } } : r));
+    onToast(`Rotograma publicado como v${rotograma.versao + 1}. Disponível para o fluxo de embarque; envio ao equipamento não é automático.`);
   };
   const criarPonto = (ponto: PontoDeControle) => {
     setPontos((atuais) => [...atuais, ponto]);
@@ -121,6 +117,10 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
     onToast(`Ponto “${ponto.nome}” criado. Vincule-o a um rotograma para embarcá-lo.`);
   };
 
+  const criarRotograma = () => {
+    const novo: Rotograma = { id: newId("RG"), nome: `Viagem ${config.veiculo}`, veiculo: config.veiculo, rota: "", tracado: null, fonte: null, trechos: [], trechoAtual: 0, desvioMin: 0, nivel: "no_prazo", versao: 0, rascunho: true };
+    setRotogramas(atuais => [...atuais, novo]); setShowTracado(true);
+  };
   return <div className="wsp geo-wsp">
     <div className={`wsp-corpo sem-inspetor ${navegadorRecolhido ? "nav-recolhida" : ""}`}>
       <VehicleNavigator
@@ -130,7 +130,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
       />
       <section className="wsp-canvas-wrap" aria-label="Pontos de controle e rotograma">
         <header className="wsp-canvas-toolbar geo-toolbar">
-          <div className="eq-identidade"><MapPinned size={17} /><div><h2>{config.veiculo} · {aba === "rotograma" ? "Rotograma" : "Pontos de controle"}</h2><p>{rotograma ? `${rotograma.nome} · rota ${rotograma.rota} · v${rotograma.versao}` : "Nenhum rotograma vinculado"}</p></div></div>
+          <div className="eq-identidade"><MapPinned size={17} /><div><h2>{config.veiculo} · {aba === "rotograma" ? "Rotograma" : "Pontos de controle"}</h2><p>{rotograma ? `${rotograma.nome} ${rotograma.rascunho ? "· Rascunho" : ""} · v${rotograma.versao}` : "Nenhum rotograma vinculado"}</p></div></div>
           <div className="geo-toolbar-acoes">
             {aba === "rotograma" && rotograma ? <button className="geo-btn" onClick={() => setShowTracado(true)}><Route size={13} /> {rotograma.tracado ? "Trocar traçado" : "Definir traçado"}</button> : null}
             {aba === "rotograma" && rotograma ? <button className="geo-btn primario" onClick={publicar}><Send size={13} /> Publicar</button> : null}
@@ -149,7 +149,7 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
           {aba === "rotograma" ? <RotogramaWorkspace
             rotograma={rotograma} pontos={pontos} trecho={trechoSelecionado}
             recolhido={itinerarioRecolhido} onRecolher={() => setItinerarioRecolhido(!itinerarioRecolhido)}
-            onTrecho={setTrechoId} onPatch={patchTrecho} onDefinirTracado={() => setShowTracado(true)}
+            onCriar={criarRotograma} onTrecho={setTrechoId} onPatch={patchTrecho} onDefinirTracado={() => setShowTracado(true)}
           /> : null}
           {aba === "pontos" ? <PontosWorkspace
             pontos={pontos} selecionado={pontoSelecionado} noRotograma={idsNoRotograma}
@@ -168,6 +168,8 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
       pontos={pontos}
       paradasAtuais={rotograma.trechos.length ? [rotograma.trechos[0].de, ...rotograma.trechos.map((t) => t.para)] : []}
       corredorPadrao={rotograma.tracado?.corredorM ?? 300}
+      fonteAtual={rotograma.fonte}
+      rotaAtual={rotograma}
       onClose={() => setShowTracado(false)}
       onAplicar={aplicarTracado}
     /> : null}
@@ -180,7 +182,8 @@ export function ControlPointsView({ pontos, setPontos, configs, veiculo, arvore,
 // pontos na ordem dos trechos e mostra qual está em curso — por isso aqui não há
 // barra de ferramentas de desenho, só leitura e os limites por trecho.
 
-function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, onTrecho, onPatch, onDefinirTracado }: {
+function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, onTrecho, onPatch, onDefinirTracado, onCriar }: {
+  onCriar: () => void;
   rotograma?: Rotograma;
   pontos: PontoDeControle[];
   trecho?: Trecho;
@@ -213,7 +216,7 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
         id: `${rotograma.id}-${t.id}`,
         estilo: rotograma.tracado && estado === "trecho" ? "trecho" : estado,
         rotulo: `Trecho ${indice + 1} · ${t.distanciaKm} km · ${t.duracaoMin} min · máx ${t.limites.velocidadeKmh} km/h`,
-        geometria: { tipo: "linha", corredorM: 0, vertices: [centroDe(de.geometria), centroDe(para.geometria)] },
+        geometria: { tipo: "linha", corredorM: 0, vertices: t.vertices ?? [centroDe(de.geometria), centroDe(para.geometria)] },
         aoClicar: () => onTrecho(t.id),
       });
     });
@@ -231,12 +234,12 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
     return lista;
   }, [rotograma, pontos, onTrecho]);
 
-  if (!rotograma) return <div className="geo-empty"><MapPinned size={28} /><strong>Nenhum rotograma para este veículo</strong><span>Crie uma jornada a partir dos pontos de controle cadastrados.</span><button className="geo-btn primario"><Plus size={13} /> Criar rotograma</button></div>;
+  if (!rotograma) return <div className="geo-empty"><MapPinned size={28} /><strong>Nenhum rotograma para este veículo</strong><span>Crie uma jornada a partir dos pontos de controle cadastrados.</span><button className="geo-btn primario" onClick={onCriar}><Plus size={13} /> Criar rotograma</button></div>;
 
   const totalKm = rotograma.trechos.reduce((total, t) => total + t.distanciaKm, 0);
   return <div className={`geo-rotograma-grid ${recolhido ? "itinerario-recolhido" : ""}`}>
     <div className="geo-mapa-card">
-      <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{totalKm} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
+      <div className="geo-card-head"><div><strong>Visão da viagem</strong><span>{totalKm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km planejados · {rotograma.trechos.length} trechos</span></div><Tag tone={nivelDesvioTone[rotograma.nivel]}>{nivelDesvioLabel[rotograma.nivel]} · {rotograma.desvioMin > 0 ? "+" : ""}{rotograma.desvioMin} min</Tag></div>
       <div className="geo-tracado-barra">
         <ResumoFonte fonte={rotograma.fonte} />
         <button className="geo-btn" onClick={onDefinirTracado}><Pencil size={12} /> {rotograma.tracado ? "Trocar traçado" : "Definir traçado"}</button>
@@ -272,7 +275,7 @@ function RotogramaWorkspace({ rotograma, pontos, trecho, recolhido, onRecolher, 
         const ativo = trecho?.id === t.id;
         const estado = index < rotograma.trechoAtual ? "concluido" : index === rotograma.trechoAtual ? "em-curso" : "planejado";
         return <button key={t.id} className={`geo-trecho ${ativo ? "selecionado" : ""}`} onClick={() => onTrecho(t.id)}>
-          <span className={`geo-trecho-num ${estado}`}>{index + 1}</span><span><strong>{nomePonto(t.de, pontos)} → {nomePonto(t.para, pontos)}</strong><small>{t.distanciaKm} km · {t.duracaoMin} min</small></span>{estado === "em-curso" ? <Tag tone="blue">em curso</Tag> : null}
+          <span className={`geo-trecho-num ${estado}`}>{index + 1}</span><span><strong>{nomePonto(t.de, pontos)} → {nomePonto(t.para, pontos)}</strong><small>{t.distanciaKm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km · {Math.round(t.duracaoMin)} min</small></span>{estado === "em-curso" ? <Tag tone="blue">em curso</Tag> : null}
         </button>;
       })}</div>
       {trecho ? <div className="geo-editor-trecho"><h3>Limites do trecho</h3><div className="geo-campos">

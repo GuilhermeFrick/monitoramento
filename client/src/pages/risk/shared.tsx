@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, Plus, X } from "lucide-react";
 
 export type IconType = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -51,8 +51,18 @@ export function KpiCard({ label, value, meta, icon: Icon, tone = "teal", trend }
   return <div className="kpi-card animate-rise"><div className="kpi-top"><span>{label}</span><span className={`kpi-icon ${tone}`}><Icon size={15} /></span></div><div className="kpi-value">{value}</div><div className="kpi-meta">{trend === "up" ? <ArrowUpRight size={12} className="delta-up" /> : trend === "down" ? <ArrowDownRight size={12} className="delta-down" /> : null}<span className={trend === "up" ? "delta-up" : trend === "down" ? "delta-down" : ""}>{meta}</span></div></div>;
 }
 
-export function Modal({ title, description, onClose, children, wide }: { title: string; description?: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
-  return <div className="modal-backdrop" onClick={onClose}><div className={`modal ${wide ? "modal-wide" : ""}`} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="modal-title">{title}</div>{description ? <div className="modal-desc">{description}</div> : null}</div><button className="close-btn" onClick={onClose} aria-label="Fechar"><X size={15} /></button></div>{children}</div></div>;
+export function Modal({ title, description, onClose, children, wide, className = "" }: { title: string; description?: string; onClose: () => void; children: ReactNode; wide?: boolean; className?: string }) {
+  const root = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    const anterior = document.activeElement as HTMLElement | null;
+    root.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => anterior?.focus();
+  }, []);
+  return <div className="modal-backdrop" onClick={onClose}><div ref={root} role="dialog" aria-modal="true" aria-label={title} className={`modal ${wide ? "modal-wide" : ""} ${className}`} onClick={(event) => event.stopPropagation()} onKeyDown={e=>{
+    if(e.key === "Escape") { e.stopPropagation(); close.current(); }
+    if(e.key === "Tab") { const all = Array.from(root.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea, summary, a[href], [tabindex="0"]') ?? []).filter(x=>x.getClientRects().length); const first=all[0],last=all.at(-1); if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();} }
+  }}><div className="modal-head"><div><div className="modal-title">{title}</div>{description ? <div className="modal-desc">{description}</div> : null}</div><button className="close-btn" onClick={onClose} aria-label="Fechar"><X size={15} /></button></div>{children}</div></div>;
 }
 
 export function Tag({ tone = "neutral", children }: { tone?: "neutral" | "teal" | "amber" | "red" | "blue" | "dark"; children: ReactNode }) {

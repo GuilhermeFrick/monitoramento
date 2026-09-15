@@ -34,7 +34,7 @@ export type FormaMapa = {
   estilo: EstiloForma;
   rotulo?: string;
   /** Linha tracejada ligando pontos na ordem do rotograma, sem corredor. */
-  aoClicar?: () => void;
+  aoClicar?: (posicao: LatLng) => void;
 };
 
 export type MapaGeoProps = {
@@ -47,6 +47,9 @@ export type MapaGeoProps = {
   ajuste?: string;
   rotulo: string;
   altura?: number;
+  marcadores?: { id: string; coordenada: LatLng; texto: string; nome: string; tipo: "origem" | "destino" | "parada" | "passagem" }[];
+  onMoverMarcador?: (id: string, coordenada: LatLng) => void;
+  onEscolherPosicao?: ((coordenada: LatLng) => void) | null;
 };
 
 /**
@@ -61,8 +64,8 @@ export type MapaGeoProps = {
  * ⚠️ Para volume de produção, troque por um provedor contratado — o servidor
  * comunitário do OSM não é para tráfego de aplicação.
  */
-const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const ATRIBUICAO = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const TILES = import.meta.env?.VITE_MAP_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const ATRIBUICAO = import.meta.env?.VITE_MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 /** Traço de cada estilo. Espelha a paleta do painel: petróleo age, âmbar atenta, vermelho bloqueia. */
 const ESTILOS: Record<EstiloForma, LeafletNS.PathOptions> = {
@@ -109,7 +112,7 @@ function metrosEmPixels(metros: number, lat: number, mapa: LeafletNS.Map): numbe
   return Math.max(2, metros / metrosPorPixel);
 }
 
-export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }: MapaGeoProps) {
+export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura, marcadores, onMoverMarcador, onEscolherPosicao }: MapaGeoProps) {
   const hospedeiro = useRef<HTMLDivElement | null>(null);
   const mapa = useRef<LeafletNS.Map | null>(null);
   const leaflet = useRef<typeof LeafletNS | null>(null);
@@ -126,6 +129,8 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
    */
   const refEditando = useRef(editando);
   const refDesenhando = useRef(desenhando);
+  const refMover = useRef(onMoverMarcador); refMover.current = onMoverMarcador;
+  const refEscolher = useRef(onEscolherPosicao); refEscolher.current = onEscolherPosicao;
   refEditando.current = editando;
   refDesenhando.current = desenhando;
   const [pronto, setPronto] = useState(false);
@@ -193,12 +198,45 @@ export function MapaGeo({ formas, editando, desenhando, ajuste, rotulo, altura }
     for (const forma of formas) {
       const estilo = ESTILOS[forma.estilo];
       for (const camada of construir(L, forma.geometria, estilo, m, corredores)) {
-        if (forma.rotulo) camada.bindTooltip(forma.rotulo, { direction: "top", className: "mapa-rotulo" });
-        if (forma.aoClicar) camada.on("click", (evento) => { L.DomEvent.stop(evento); forma.aoClicar?.(); });
+        if (forma.rotulo) { const label = document.createElement("span"); label.textContent = forma.rotulo; camada.bindTooltip(label, { direction: "top", className: "mapa-rotulo" }); }
+        if (forma.aoClicar) camada.on("click", (evento: LeafletNS.LeafletMouseEvent) => { L.DomEvent.stop(evento); forma.aoClicar?.(daLL(evento.latlng)); });
         grupo.addLayer(camada);
       }
     }
   }, [formas, pronto]);
+
+  const chaveMarcadores = JSON.stringify(marcadores ?? []);
+  useEffect(() => {
+    const L = leaflet.current, m = mapa.current;
+    if (!L || !m) return;
+    const grupo = L.layerGroup().addTo(m);
+    for (const p of marcadores ?? []) {
+      const html = document.createElement("span"); html.textContent = p.texto;
+      const marker = L.marker(paraLL(p.coordenada), { draggable: true, keyboard: true, title: `${p.nome} — arraste ou use as setas do teclado`,
+        icon: L.divIcon({ html, className: `roteiro-pin ${p.tipo}`, iconSize: p.tipo === "passagem" ? [22,22] : [30,30], iconAnchor: p.tipo === "passagem" ? [11,11] : [15,15] }) }).addTo(grupo);
+      marker.on("dragstart", () => { arrastando.current = true; });
+      marker.on("dragend", () => { arrastando.current = false; refMover.current?.(p.id, daLL(marker.getLatLng())); });
+      marker.getElement()?.addEventListener("keydown", (e) => {
+        if (!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) return;
+        e.preventDefault(); e.stopPropagation();
+        const passo = e.shiftKey ? 0.001 : 0.0001;
+        const ll = marker.getLatLng();
+        const next = { lat: Math.max(-90, Math.min(90, ll.lat + (e.key === "ArrowUp" ? passo : e.key === "ArrowDown" ? -passo : 0))), lng: Math.max(-180, Math.min(180, ll.lng + (e.key === "ArrowRight" ? passo : e.key === "ArrowLeft" ? -passo : 0))) };
+        marker.setLatLng(paraLL(next));
+        refMover.current?.(p.id, next);
+      });
+    }
+    return () => { grupo.remove(); arrastando.current = false; };
+  }, [chaveMarcadores, pronto]);
+
+  const escolhendo = !!onEscolherPosicao;
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !pronto || !escolhendo) return;
+    const selecionar = (e: LeafletNS.LeafletMouseEvent) => refEscolher.current?.(daLL(e.latlng));
+    m.getContainer().classList.add("escolhendo-posicao"); m.on("click", selecionar);
+    return () => { m.off("click", selecionar); m.getContainer().classList.remove("escolhendo-posicao"); };
+  }, [escolhendo, pronto]);
 
   // -------------------------------------------------------- alças de edição
   const chaveEdicao = editando ? JSON.stringify(editando.geometria) : "";
