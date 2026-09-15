@@ -41,7 +41,7 @@ export function EquipmentConfigView({ configs, setConfigs, veiculo, arvore, busc
 
   const alterar: AlterarMapa = (descricao, fn) => setConfigs((atual) => atual.map((c) => c.veiculo !== config.veiculo ? c : {
     ...c, mapaIO: fn(normalizarMapaIO(c.veiculo, c.mapaIO)),
-    mudancas: [...c.mudancas, { id: newId("MD"), descricao, em: new Date().toISOString(), por: "Larissa Martins" }],
+    mudancas: [...c.mudancas, { id: newId("MD"), descricao, em: new Date().toISOString(), por: "User Teste" }],
   }));
 
   const enviarConfiguracao = () => {
@@ -55,7 +55,7 @@ export function EquipmentConfigView({ configs, setConfigs, veiculo, arvore, busc
         versaoEmbarcada: (c.versaoEmbarcada ?? 0) + 1,
         sincronizadoEm: em,
         ultimoEmbarque: {
-          em, por: "Larissa Martins", estado: "sucesso",
+          em, por: "User Teste", estado: "sucesso",
           itens: [{ id: "MAPA-IO", nome: "Entradas, saídas e comunicação do equipamento", estado: "aceito" }],
         },
       }));

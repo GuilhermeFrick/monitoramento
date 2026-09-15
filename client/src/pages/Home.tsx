@@ -175,7 +175,7 @@ function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen }: { active
         <button title={collapsed ? "Configurações" : undefined} aria-label={collapsed ? "Configurações" : undefined} className={`nav-btn ${active === "settings" ? "active" : ""}`} onClick={() => onSelect("settings")}><Settings size={16} strokeWidth={1.8} /><span>Configurações</span></button>
       </div>
       <div className="sidebar-bottom">
-        <div className="operator-card"><div className="avatar">LM</div><div><div className="operator-name">Larissa Martins</div><div className="operator-role">Operadora · turno ativo</div></div><ChevronDown size={13} className="ml-auto" /></div>
+        <div className="operator-card"><div className="avatar">UT</div><div><div className="operator-name">User Teste</div><div className="operator-role">Operadora · turno ativo</div></div><ChevronDown size={13} className="ml-auto" /></div>
       </div>
     </aside>
   );
@@ -188,7 +188,7 @@ function Topbar({ title, onSearch, onToast, compact = false }: { title: string; 
       <label className="search-box"><Search size={14} /><input aria-label="Buscar" placeholder="Buscar veículo, motorista..." onChange={(event) => onSearch(event.target.value)} /></label>
       <button className="icon-btn" aria-label="Ajuda" onClick={() => onToast("Central de ajuda disponível em breve.")}><LifeBuoy size={15} /></button>
       <button className="icon-btn" aria-label="Notificações" onClick={() => onToast("Você tem 12 riscos aguardando tratamento.")}><Bell size={15} /><span className="notification-dot" /></button>
-      <div className="avatar" title="Larissa Martins">LM</div>
+      <div className="avatar" title="User Teste">UT</div>
     </div>
   </header>;
 }
@@ -212,7 +212,7 @@ function FleetTable({ search, onSelectRisk }: { search: string; onSelectRisk: (r
 
 function Dashboard({ search, onSelectRisk, onToast, onNavigate }: { search: string; onSelectRisk: (risk: Risk) => void; onToast: (message: string) => void; onNavigate: (view: ViewKey) => void }) {
   return <>
-    <PageHeader eyebrow="Cockpit operacional" title="Bom dia, Larissa" description="Aqui está o pulso de segurança da sua operação neste momento." />
+    <PageHeader eyebrow="Cockpit operacional" title="Bom dia, User Teste" description="Aqui está o pulso de segurança da sua operação neste momento." />
     <div className="kpi-grid"><KpiCard label="Score de segurança" value="78 / 100" meta="4,2% vs. semana anterior" icon={CircleGauge} trend="up" /><KpiCard label="Riscos ativos" value="12" meta="3 críticos aguardando ação" icon={ShieldAlert} tone="red" trend="down" /><KpiCard label="Veículos conectados" value="184 / 192" meta="95,8% da frota online" icon={Radio} trend="up" /><KpiCard label="Tempo médio de resposta" value="04:38" meta="18% mais rápido" icon={Clock3} trend="up" /></div>
     <div className="grid-2-1"><div className="panel animate-rise animate-delay-1"><div className="panel-header"><div><div className="panel-title">Tendência de risco operacional</div><div className="panel-subtitle">Score consolidado da frota · últimos 6 dias</div></div><div className="chart-legend"><span className="legend-item"><i className="legend-dot" /> Score atual</span><span className="legend-item"><i className="legend-dot alt" /> Meta 80</span></div></div><RiskChart /></div><div className="panel animate-rise animate-delay-2"><div className="panel-header"><div><div className="panel-title">Saúde da operação</div><div className="panel-subtitle">Distribuição por criticidade</div></div><button className="panel-link" onClick={() => onSelectRisk(initialRisks[0])}>Detalhar</button></div><div className="risk-summary"><div className="score-ring"><div>78</div></div><div><div className="score-label">Score geral</div><div className="score-title">Operação controlada</div><div className="score-context">+4,2% de evolução no período</div></div></div><div className="risk-bars"><div className="risk-row"><span>Baixo risco</span><strong>142</strong><div className="bar"><span style={{ width: "76%" }} /></div></div><div className="risk-row"><span>Risco moderado</span><strong>31</strong><div className="bar warn"><span style={{ width: "28%" }} /></div></div><div className="risk-row"><span>Alto risco</span><strong>11</strong><div className="bar danger"><span style={{ width: "11%" }} /></div></div></div></div></div>
     <div className="grid-2-1"><MapPanel onSelectRisk={onSelectRisk} /><FeedPanel onSelectRisk={onSelectRisk} onViewAll={() => onNavigate("events")} /></div>
@@ -349,7 +349,7 @@ function MainApp() {
   const registrarRascunho = (veiculos: string[], descricao: string) => {
     if (!veiculos.length) return;
     setConfigs((atuais) => atuais.map((c) => veiculos.includes(c.veiculo)
-      ? { ...c, mudancas: [...c.mudancas, { id: newId("MD"), descricao, em: new Date().toISOString(), por: "Larissa Martins" }] }
+      ? { ...c, mudancas: [...c.mudancas, { id: newId("MD"), descricao, em: new Date().toISOString(), por: "User Teste" }] }
       : c));
   };
   const entityView = activeView as "fleet" | "drivers" | "training" | "traffic" | "settings";

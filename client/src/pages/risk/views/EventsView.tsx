@@ -16,8 +16,8 @@ export function EventsView({ pontos, onToast, onCommand }: { pontos: PontoDeCont
   const selected = eventos.find((e) => e.id === selectedId) ?? null;
   const abertas = eventos.filter((e) => e.natureza === "condicao" && !e.encerradoEm).length;
 
-  const addComentario = (id: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: [...e.comentarios, { id: newId("c"), texto, autor: "Larissa Martins", criadoEm: new Date().toISOString() }] } : e)); onToast("Comentário registrado."); };
-  const editComentario = (id: string, cid: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: e.comentarios.map((k) => k.id === cid ? { ...k, texto, editadoPor: "Larissa Martins", editadoEm: new Date().toISOString() } : k) } : e)); onToast("Comentário editado com registro de autoria e horário."); };
+  const addComentario = (id: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: [...e.comentarios, { id: newId("c"), texto, autor: "User Teste", criadoEm: new Date().toISOString() }] } : e)); onToast("Comentário registrado."); };
+  const editComentario = (id: string, cid: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: e.comentarios.map((k) => k.id === cid ? { ...k, texto, editadoPor: "User Teste", editadoEm: new Date().toISOString() } : k) } : e)); onToast("Comentário editado com registro de autoria e horário."); };
 
   return <>
     <PageHeader eyebrow="Timeline do fato" title="Eventos" description="Ordenados pelo instante em que ocorreram, não pela chegada. Condições têm início e fim; marcos acontecem num instante." />

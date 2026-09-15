@@ -23,7 +23,7 @@ export function CommandModal({ veiculo, onClose, onToast, onSent }: { veiculo: s
   const escolherModo = (m: "delegado" | "direto") => { setModo(m); setComandoId(comandos.find((c) => c.modo === m)?.id ?? ""); setPersistente(false); setEtapa(1); };
   const enviar = () => {
     if (!comando) return;
-    const registro: HistoricoComando = { id: newId("HC"), comando: comando.nome, veiculo, modo: comando.modo, persistente, observacao: observacao.trim(), enviadoEm: new Date().toISOString(), enviadoPor: "Larissa Martins", status: "enviado" };
+    const registro: HistoricoComando = { id: newId("HC"), comando: comando.nome, veiculo, modo: comando.modo, persistente, observacao: observacao.trim(), enviadoEm: new Date().toISOString(), enviadoPor: "User Teste", status: "enviado" };
     setHistorico((c) => [registro, ...c]);
     onSent?.(registro);
     onToast(comando.modo === "delegado" ? `Botão habilitado em ${veiculo} (${persistente ? "persistente" : "modo único"}). O motorista precisa acionar no veículo.` : `Comando “${comando.nome}” enviado a ${veiculo}.`);

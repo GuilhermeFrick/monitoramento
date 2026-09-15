@@ -41,7 +41,7 @@ export const equipamentos: Equipamento[] = [
   { veiculo: "VTR-1783", equipamento: "MDVR-0714", linha: "MDVR-8", firmware: "4.1.0", perfilAtivo: "Em viagem", perfilDesde: "2026-09-08T09:15:00", perfilOrigem: { tipo: "macro", ref: "MC-CLIENTE-OUT" }, canal: "celular" },
   { veiculo: "VTR-0931", equipamento: "MDVR-1028", linha: "MDVR-4", firmware: "3.9.4", perfilAtivo: "No cliente", perfilDesde: "2026-09-08T13:58:00", perfilOrigem: { tipo: "geocerca", ref: "PC-001" }, canal: "satelite" },
   { veiculo: "VTR-3110", equipamento: "MDVR-0921", linha: "MDVR-8", firmware: "4.2.1", perfilAtivo: "Abastecimento", perfilDesde: "2026-09-08T12:20:00", perfilOrigem: { tipo: "geocerca", ref: "PC-003" }, canal: "celular" },
-  { veiculo: "VTR-2240", equipamento: "MDVR-0655", linha: "MDVR-4", firmware: "3.8.0", perfilAtivo: "Pernoite", perfilDesde: "2026-09-07T21:05:00", perfilOrigem: { tipo: "comando", ref: "Larissa Martins" }, canal: "sem_sinal" },
+  { veiculo: "VTR-2240", equipamento: "MDVR-0655", linha: "MDVR-4", firmware: "3.8.0", perfilAtivo: "Pernoite", perfilDesde: "2026-09-07T21:05:00", perfilOrigem: { tipo: "comando", ref: "User Teste" }, canal: "sem_sinal" },
 ];
 
 export const canalLabel: Record<Equipamento["canal"], string> = { celular: "Celular", satelite: "Satélite (contingência)", lorawan: "LoRaWAN (contingência)", sem_sinal: "Sem sinal" };
@@ -853,8 +853,8 @@ const configuracoesBase: ConfiguracaoVeiculo[] = [
   { veiculo: "VTR-1783", frota: "Centro · Longa distância", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-1783")!.linha), macroVigente: "MC-CLIENTE-OUT", desde: "2026-09-08T09:15:00", versaoEmbarcada: 7, mudancas: [], sincronizadoEm: "2026-09-02T08:12:00", ultimoEmbarque: null },
   { veiculo: "VTR-0931", frota: "Sudeste · Última milha", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-0931")!.linha), macroVigente: "MC-CLIENTE-IN", desde: "2026-09-08T13:58:00", versaoEmbarcada: 4,
     mudancas: [
-      { id: "MD-01", descricao: "Trava do baú passou a exigir credencial em “Chegada no cliente”", em: "2026-09-08T10:12:00", por: "Larissa Martins" },
-      { id: "MD-02", descricao: "Sensor de movimento armado no perfil padrão", em: "2026-09-08T10:20:00", por: "Larissa Martins" },
+      { id: "MD-01", descricao: "Trava do baú passou a exigir credencial em “Chegada no cliente”", em: "2026-09-08T10:12:00", por: "User Teste" },
+      { id: "MD-02", descricao: "Sensor de movimento armado no perfil padrão", em: "2026-09-08T10:20:00", por: "User Teste" },
     ],
     sincronizadoEm: "2026-08-23T07:40:00", ultimoEmbarque: null },
   { veiculo: "VTR-3110", frota: "Sudeste · Operação", perfilPadrao: perfilPadraoBase(), macros: macrosBase(), transicoes: transicoesBase(), mapaIO: mapaIOBase(equipamentos.find((e) => e.veiculo === "VTR-3110")!.linha), macroVigente: "MC-ABASTECIMENTO", desde: "2026-09-08T12:20:00", versaoEmbarcada: 2, mudancas: [], sincronizadoEm: "2026-09-05T14:00:00",
@@ -1125,7 +1125,7 @@ export const catalogo: CatalogoItem[] = [
 
 export const embarquesIniciais: Embarque[] = [
   {
-    id: "EMB-3041", veiculo: "VTR-2048", equipamento: "MDVR-0882", emitidoEm: "2026-09-08T05:42:00", emitidoPor: "Larissa Martins",
+    id: "EMB-3041", veiculo: "VTR-2048", equipamento: "MDVR-0882", emitidoEm: "2026-09-08T05:42:00", emitidoPor: "User Teste",
     itens: [
       { id: "i1", tipo: "jornada", referencia: "RG-2048", nome: "Jornada VTR-2048 · 08 set", versao: 2, aceite: "aceito", respondidoEm: "2026-09-08T05:43:10" },
       { id: "i2", tipo: "ponto", referencia: "PC-003", nome: "Base Campinas · carregamento", versao: 2, aceite: "aceito", respondidoEm: "2026-09-08T05:43:11" },
@@ -1136,7 +1136,7 @@ export const embarquesIniciais: Embarque[] = [
     ],
   },
   {
-    id: "EMB-3040", veiculo: "VTR-0931", equipamento: "MDVR-1028", emitidoEm: "2026-09-08T05:10:00", emitidoPor: "Larissa Martins",
+    id: "EMB-3040", veiculo: "VTR-0931", equipamento: "MDVR-1028", emitidoEm: "2026-09-08T05:10:00", emitidoPor: "User Teste",
     itens: [
       { id: "i1", tipo: "jornada", referencia: "RG-0931", nome: "Jornada VTR-0931 · 08 set", versao: 3, aceite: "aceito", respondidoEm: "2026-09-08T05:11:02" },
       { id: "i2", tipo: "perfil", referencia: "PF-CLIENTE", nome: "No cliente", versao: 4, aceite: "rejeitado", motivo: "Firmware 3.9.4 não suporta atuador 'luz_alerta' em modo como_estava", respondidoEm: "2026-09-08T05:11:05" },
@@ -1190,7 +1190,7 @@ export type Evento = {
 
 export const eventosIniciais: Evento[] = [
   { id: "EV-9105", tipo: "coacao", titulo: "Senha de coação utilizada", veiculo: "VTR-1783", motorista: "Ana Paula Costa", natureza: "marco", occurredAt: "2026-09-08T14:31:20", receivedAt: "2026-09-08T14:31:22", encerradoEm: null, severidade: "alta", perfilAtivo: "Em viagem", pontoDeControle: null, detalhe: "Credencial de coação validada no equipamento. Operação autorizada normalmente no veículo; alerta silencioso roteado somente para a gestão de risco.", comentarios: [] },
-  { id: "EV-9104", tipo: "comportamento", titulo: "Fadiga detectada", veiculo: "VTR-2048", motorista: "Carlos Mendes", natureza: "condicao", occurredAt: "2026-09-08T14:32:00", receivedAt: "2026-09-08T14:32:03", encerradoEm: null, severidade: "alta", perfilAtivo: "Em viagem", pontoDeControle: null, detalhe: "Padrão de olhos fechados acima do limiar por 8 segundos.", comentarios: [{ id: "c1", texto: "Contato por intercom realizado, motorista respondeu.", autor: "Larissa Martins", criadoEm: "2026-09-08T14:34:00" }] },
+  { id: "EV-9104", tipo: "comportamento", titulo: "Fadiga detectada", veiculo: "VTR-2048", motorista: "Carlos Mendes", natureza: "condicao", occurredAt: "2026-09-08T14:32:00", receivedAt: "2026-09-08T14:32:03", encerradoEm: null, severidade: "alta", perfilAtivo: "Em viagem", pontoDeControle: null, detalhe: "Padrão de olhos fechados acima do limiar por 8 segundos.", comentarios: [{ id: "c1", texto: "Contato por intercom realizado, motorista respondeu.", autor: "User Teste", criadoEm: "2026-09-08T14:34:00" }] },
   { id: "EV-9103", tipo: "sinal", titulo: "Perda de sinal celular", veiculo: "VTR-2240", motorista: "Não identificado", natureza: "condicao", occurredAt: "2026-09-08T14:02:10", receivedAt: "2026-09-08T14:02:10", encerradoEm: null, severidade: "media", perfilAtivo: "Pernoite", pontoDeControle: "PC-002", ultimaPosicao: "Seropédica · -22.7438, -43.7071 · 14:01:58", canalContingencia: "sem_sinal", detalhe: "Sem reporte pelo canal celular há 30 min. Canal de contingência não configurado para este perfil neste equipamento.", comentarios: [] },
   { id: "EV-9102", tipo: "rota", titulo: "Fora do corredor da rota", veiculo: "VTR-1783", motorista: "Ana Paula Costa", natureza: "condicao", occurredAt: "2026-09-08T13:48:00", receivedAt: "2026-09-08T13:48:02", encerradoEm: null, severidade: "alta", perfilAtivo: "Em viagem", pontoDeControle: null, detalhe: "Distância ao corredor de RT-02: 1.240 m (corredor de 500 m).", comentarios: [] },
   { id: "EV-9101", tipo: "sensor", titulo: "Porta do baú aberta fora de ponto de controle", veiculo: "VTR-0931", motorista: "Rafael Nunes", natureza: "condicao", occurredAt: "2026-09-08T12:20:40", receivedAt: "2026-09-08T13:05:12", encerradoEm: "2026-09-08T12:24:05", severidade: "alta", perfilAtivo: "Em viagem", pontoDeControle: null, canalContingencia: "satelite", detalhe: "Sensor de porta do baú violado com perfil Viagem normal. Evento entregue após reconexão via satélite.", comentarios: [] },
@@ -1241,8 +1241,8 @@ export const textosComandoIniciais = ["Liberação solicitada pelo cliente na do
 export type HistoricoComando = { id: string; comando: string; veiculo: string; modo: "direto" | "delegado"; persistente: boolean; observacao: string; enviadoEm: string; enviadoPor: string; status: "enviado" | "acionado_pelo_motorista" | "expirado" };
 
 export const historicoComandosInicial: HistoricoComando[] = [
-  { id: "HC-01", comando: "Habilitar botão de destrave do baú", veiculo: "VTR-2048", modo: "delegado", persistente: false, observacao: "Liberação solicitada pelo cliente na doca.", enviadoEm: "2026-09-08T11:40:00", enviadoPor: "Larissa Martins", status: "acionado_pelo_motorista" },
-  { id: "HC-02", comando: "Solicitar reporte de posição", veiculo: "VTR-2240", modo: "direto", persistente: false, observacao: "Sem sinal há 20 min, tentando reporte por contingência.", enviadoEm: "2026-09-08T14:22:00", enviadoPor: "Larissa Martins", status: "expirado" },
+  { id: "HC-01", comando: "Habilitar botão de destrave do baú", veiculo: "VTR-2048", modo: "delegado", persistente: false, observacao: "Liberação solicitada pelo cliente na doca.", enviadoEm: "2026-09-08T11:40:00", enviadoPor: "User Teste", status: "acionado_pelo_motorista" },
+  { id: "HC-02", comando: "Solicitar reporte de posição", veiculo: "VTR-2240", modo: "direto", persistente: false, observacao: "Sem sinal há 20 min, tentando reporte por contingência.", enviadoEm: "2026-09-08T14:22:00", enviadoPor: "User Teste", status: "expirado" },
 ];
 
 // ------------------------------------------------------------------ Helpers

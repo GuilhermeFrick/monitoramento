@@ -10,7 +10,7 @@ import { ProfileInspector, type AbaInspetor } from "./ProfileInspector";
 import { DeployReviewDialog, type FaseEmbarque } from "./DeployDialogs";
 import type { ControleArvoreVeiculos, VehicleNavigatorProps } from "./VehicleNavigator";
 
-const OPERADOR = "Larissa Martins";
+const OPERADOR = "User Teste";
 
 export function useConfiguracoes() { return useStoredState<ConfiguracaoVeiculo[]>(STORAGE.configuracoes, configuracoesIniciais); }
 
