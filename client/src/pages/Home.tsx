@@ -64,7 +64,7 @@ import {
   Sun,
 } from "lucide-react";
 import { KpiCard, PageHeader, type IconType } from "./risk/shared";
-import { equipamentoDe, newId } from "./risk/domain";
+import { equipamentoDe, newId, type ConfiguracaoVeiculo } from "./risk/domain";
 import { useContext } from "react";
 import { ThemeContext } from "../contexts/ThemeContext";
 import { ProfilesView, useConfiguracoes } from "./risk/views/ProfilesView";
@@ -76,11 +76,13 @@ import { RoutesView } from "./risk/views/RoutesView";
 import { ProvisioningView } from "./risk/views/ProvisioningView";
 import { SecurityView } from "./risk/views/SecurityView";
 import { EventsView } from "./risk/views/EventsView";
+import { EvidenceView } from "./risk/views/EvidenceView";
+import { JourneyView } from "./risk/views/JourneyView";
 import { MessagingPanel } from "./risk/views/MessagingPanel";
 import { CommandModal } from "./risk/views/CommandModal";
 import { RiskKanbanView, type AlertRisk } from "./risk/views/RiskKanbanView";
 
-type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
+type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "journey" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
 
 type Risk = AlertRisk;
 
@@ -105,6 +107,7 @@ const navGroups: { label: string; items: { id: ViewKey; label: string; icon: Ico
   ] },
   { label: "Inteligência", items: [
     { id: "evidence", label: "Evidências & vídeo", icon: Video },
+    { id: "journey", label: "Jornada", icon: Clock3 },
     { id: "reports", label: "Relatórios", icon: FileBarChart },
   ] },
   { label: "Regras e geocercas", items: [
@@ -256,40 +259,68 @@ function MosaicExternalPage() {
   return <MosaicDisplay vehicles={vehicles.length ? vehicles : fleetRows.slice(0, 4)} external />;
 }
 
-function RealtimeView({ onSelectRisk, onToast, onCommand }: { onSelectRisk: (risk: Risk) => void; onToast: (message: string) => void; onCommand: (vehicle: string) => void }) {
-  const [selectedVehicle, setSelectedVehicle] = useState("VTR-2048");
-  const [treeFilter, setTreeFilter] = useState("");
+function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca, onSelectRisk, onToast, onCommand }: {
+  configs: ConfiguracaoVeiculo[];
+  veiculo: { atual: string; selecionar: (veiculo: string) => void };
+  arvore: ControleArvoreVeiculos;
+  busca: string;
+  onBusca: (valor: string) => void;
+  onLimparBusca: () => void;
+  onSelectRisk: (risk: Risk) => void;
+  onToast: (message: string) => void;
+  onCommand: (vehicle: string) => void;
+}) {
   const [cameraCount, setCameraCount] = useState(4);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>(["VTR-2048", "VTR-1783"]);
   const [monitorMode, setMonitorMode] = useState<"single" | "mosaic">("single");
-  const vehicles = fleetRows.filter((row) => `${row.vehicle} ${row.driver} ${row.fleet}`.toLowerCase().includes(treeFilter.toLowerCase()));
+  const selectedVehicle = veiculo.atual || configs[0]?.veiculo || fleetRows[0].vehicle;
   const selected = fleetRows.find((row) => row.vehicle === selectedVehicle) ?? fleetRows[0];
-  const selectVehicle = (vehicle: string) => { setSelectedVehicle(vehicle); onToast(`${vehicle} selecionado · câmeras e telemetria atualizadas.`); };
+  const selectVehicle = (vehicle: string) => { veiculo.selecionar(vehicle); onToast(`${vehicle} selecionado · câmeras e telemetria atualizadas.`); };
   const toggleMosaicVehicle = (vehicle: string) => setSelectedVehicles((current) => current.includes(vehicle) ? current.filter((item) => item !== vehicle) : [...current, vehicle]);
   const mosaicVehicles = fleetRows.filter((row) => selectedVehicles.includes(row.vehicle));
   const openMosaicWindow = () => { try { window.localStorage.setItem("avansat-risk:mosaic-selection", JSON.stringify(selectedVehicles)); } catch { /* localStorage opcional */ } const popup = window.open(`${window.location.origin}${window.location.pathname}?display=mosaic`, "avansat-monitoring-wall", "popup=yes,width=1440,height=900"); if (popup) { popup.focus(); onToast("Parede de monitoramento aberta em uma nova janela."); } else onToast("O navegador bloqueou a janela. Permita pop-ups para usar uma tela externa."); };
-  return <>
-    <PageHeader eyebrow="Centro de operação" title="Monitoramento ao vivo" description="Selecione veículos na árvore, acompanhe a posição no mapa e abra câmeras sem perder o contexto operacional." />
-    <div className="monitor-toolbar"><div className="monitor-live"><span className="live-pulse" /> AO VIVO <span>·</span> Atualizado há 8s <span className="selection-pill">{selectedVehicles.length} em foco</span></div><div className="monitor-toolbar-actions"><div className="segmented monitor-mode"><button className={monitorMode === "single" ? "active" : ""} onClick={() => setMonitorMode("single")}>Estação</button><button className={monitorMode === "mosaic" ? "active" : ""} onClick={() => setMonitorMode("mosaic")}>Mosaico <span>{selectedVehicles.length}</span></button></div><button className="secondary-btn" onClick={() => onToast("Filtros avançados disponíveis: frota, status, risco e câmera.")}><Filter size={13} /> Filtros</button><button className="secondary-btn" onClick={openMosaicWindow}><ArrowUpRight size={13} /> Abrir em tela</button><button className="primary-btn" onClick={() => onToast("Patrulha iniciada com a seleção atual.")}><PlayCircle size={13} /> Iniciar patrulha</button></div></div>
-    {monitorMode === "mosaic" ? <div className="mosaic-inline-wrap"><MosaicDisplay vehicles={mosaicVehicles} /><div className="mosaic-inline-actions"><span><CheckCircle2 size={13} /> {selectedVehicles.length} veículos selecionados</span><button className="soft-btn" onClick={openMosaicWindow}><ArrowUpRight size={13} /> Enviar para TV / monitor</button></div></div> : null}
-    <div className="monitor-workspace">
-      <aside className="fleet-tree panel">
-        <div className="fleet-tree-head"><div><div className="panel-title">Frotas e veículos</div><div className="panel-subtitle">{fleetRows.length} selecionáveis · 4 online</div></div><button className="icon-btn" onClick={() => setTreeFilter("")}><RefreshCw size={13} /></button></div>
-        <label className="tree-search"><Search size={13} /><input placeholder="Buscar frota ou veículo" value={treeFilter} onChange={(event) => setTreeFilter(event.target.value)} /></label>
-        <div className="tree-summary"><button className="tree-summary-item active" onClick={() => setTreeFilter("")}><span><Truck size={13} /> Todas as frotas</span><strong>192</strong></button><button className="tree-summary-item" onClick={() => setTreeFilter("offline")}><span><Radio size={13} /> Sem sinal</span><strong className="offline-count">8</strong></button></div>
-        <div className="tree-list"><div className="tree-group"><button className="tree-group-title"><ChevronDown size={14} /><span className="tree-folder" /> Sul · Distribuição <strong>52</strong></button><div className="tree-children">{vehicles.filter((row) => row.fleet.startsWith("Sul") || !treeFilter).map((row) => <button key={row.vehicle} className={`tree-vehicle ${selectedVehicle === row.vehicle ? "selected" : ""}`} onClick={() => selectVehicle(row.vehicle)}><span className={`tree-check ${selectedVehicles.includes(row.vehicle) ? "checked" : ""}`} onClick={(event) => { event.stopPropagation(); toggleMosaicVehicle(row.vehicle); }}>{selectedVehicles.includes(row.vehicle) ? <Check size={10} /> : null}</span><span className={`vehicle-status ${row.status === "high" ? "danger" : row.status === "medium" ? "warn" : "ok"}`} /><span className="tree-vehicle-copy"><strong>{row.vehicle}</strong><small>{row.driver}</small></span><span className="tree-risk">{row.risk}</span></button>)}</div></div><div className="tree-group collapsed"><button className="tree-group-title"><ChevronRight size={14} /><span className="tree-folder" /> Centro · Longa distância <strong>68</strong></button></div><div className="tree-group collapsed"><button className="tree-group-title"><ChevronRight size={14} /><span className="tree-folder" /> Sudeste · Operação <strong>72</strong></button></div>{vehicles.length === 0 ? <div className="empty-note">Nenhum veículo encontrado.</div> : null}</div>
-        <div className="tree-footer"><button onClick={() => setSelectedVehicles(vehicles.map((row) => row.vehicle))}><Check size={12} /> Adicionar todos</button><button onClick={() => setSelectedVehicles([])}><X size={12} /> Limpar mosaico</button></div>
-      </aside>
-      <section className="monitor-map panel"><div className="monitor-section-head"><div><div className="panel-title">Mapa operacional</div><div className="panel-subtitle">Posição, direção, risco, cercas e pontos de controle da seleção</div></div><div className="map-quick-actions"><button className="icon-btn" onClick={() => onToast("Mapa centralizado na seleção.")}><Target size={14} /></button><button className="icon-btn" onClick={() => onToast("Camadas de cercas e pontos de controle alternadas.")}><Globe2 size={14} /></button></div></div><div className="live-map-stage"><div className="map-river" /><div className="map-road a" /><div className="map-road b" /><div className="map-road c" /><div className="map-road d" /><span className="map-label one">Contagem</span><span className="map-label two">Rio de Janeiro</span><span className="map-label three">Itaguaí</span><span className="map-label four">Seropédica</span>{fleetRows.map((row, i) => <button key={row.vehicle} className={`map-pin ${row.status === "medium" ? "amber" : row.status === "low" ? "teal" : ""} live-pin-${i} ${selectedVehicle === row.vehicle ? "selected-pin" : ""}`} onClick={() => selectVehicle(row.vehicle)}><MapPin size={11} /></button>)}<div className="map-controls"><button className="map-control">+</button><button className="map-control">−</button><button className="map-control"><Target size={13} /></button></div><div className="map-legend"><span><i /> alto risco</span><span><i className="amber" /> atenção</span><span><i className="teal" /> conectado</span></div></div><div className="vehicle-strip"><div className="vehicle-strip-main"><div className="vehicle-avatar"><Truck size={15} /></div><div><strong>{selected.vehicle}</strong><small>{selected.driver} · {selected.speed} · {selected.last} · perfil {selected.perfilAtivo}</small></div></div><span className={`status ${selected.status}`}>{selected.status === "high" ? "Alto risco" : selected.status === "medium" ? "Atenção" : "Monitorado"}</span><button className="panel-link" onClick={() => onSelectRisk(initialRisks.find((risk) => risk.vehicle === selected.vehicle) ?? initialRisks[0])}>Abrir ocorrência <ChevronRight size={12} /></button></div></section>
-      <aside className="camera-wall panel"><div className="camera-wall-head"><div><div className="panel-title">Câmeras do veículo</div><div className="panel-subtitle">{selectedVehicle} · MDVR-0882</div></div><span className="status online">Online</span></div><div className="camera-tabs"><button className="active">Ao vivo</button><button>Playback</button><button>Alarmes <span>3</span></button></div><div className={`camera-grid camera-count-${cameraCount}`}>{Array.from({ length: cameraCount }).map((_, index) => <button className="camera-tile" key={index} onClick={() => onToast(`Câmera ${index + 1} aberta em foco.`)}><div className="camera-art"><span className="camera-scanline" /><PlayCircle size={22} /></div><div className="camera-tile-footer"><span>CAM {String(index + 1).padStart(2, "0")}</span><small>{index === 0 ? "Frontal" : index === 1 ? "Cabine" : index === 2 ? "Traseira" : "Lateral"}</small></div></button>)}</div><div className="camera-controls"><button className="camera-control active" onClick={() => onToast("Áudio do veículo ativado.")}><Headphones size={14} /><span>Áudio</span></button><button className="camera-control" onClick={() => onToast("Intercomunicador pronto para iniciar.")}><Radio size={14} /><span>Intercom</span></button><button className="camera-control" onClick={() => onToast("Captura salva em evidências.")}><Archive size={14} /><span>Capturar</span></button><button className="camera-control danger" onClick={() => onCommand(selectedVehicle)}><ShieldAlert size={14} /><span>Comandos</span></button></div><div className="camera-wall-footer"><span>Grade de câmeras</span><div className="segmented"><button className={cameraCount === 1 ? "active" : ""} onClick={() => setCameraCount(1)}>1</button><button className={cameraCount === 4 ? "active" : ""} onClick={() => setCameraCount(4)}>4</button></div><button className="icon-btn" onClick={() => onToast("Parede de câmeras maximizada.")}><ArrowUpRight size={14} /></button></div></aside>
-    </div>
-    <div className="monitor-statusbar"><span><CheckCircle2 size={13} /> MDVR conectado</span><span><Radio size={13} /> 184 veículos online</span><span><Video size={13} /> 12 streams ativos</span><span className="statusbar-spacer" /><button onClick={() => onToast("Central de ajuda do operador aberta.")}><Headphones size={13} /> Ajuda rápida</button></div>
-  </>;
-}
+  const selectedInMosaic = selectedVehicles.includes(selectedVehicle);
 
-function EvidenceView({ onToast }: { onToast: (message: string) => void }) {
-  const evidence = [{ title: "Fadiga detectada · VTR-2048", type: "Alarme de comportamento", time: "Hoje, 14:32", color: "red" }, { title: "Excesso de velocidade · VTR-1783", type: "Evento de dinâmica veicular", time: "Hoje, 14:28", color: "amber" }, { title: "Entrada em cerca restrita · VTR-0931", type: "Cerca · área restrita", time: "Hoje, 14:15", color: "teal" }];
-  return <><PageHeader eyebrow="Evidência operacional" title="Evidências & vídeo" description="Revise alarmes, clipes e registros de acidente vinculados a cada evento de risco." action="Solicitar evidência" onAction={() => onToast("Solicitação enviada para o dispositivo VTR-2048.")} /><div className="grid-2-1"><div className="panel"><div className="panel-header"><div><div className="panel-title">Galeria de evidências</div><div className="panel-subtitle">Últimos eventos capturados</div></div><div className="segmented"><button className="active">Todos</button><button>Alarmes</button><button>Acidentes</button></div></div>{evidence.map((item) => <div className="feed-item" key={item.title}><div className={`feed-icon ${item.color}`}><Video size={14} /></div><div><div className="feed-title">{item.title}</div><div className="feed-desc">{item.type} · {item.time}</div><div style={{ marginTop: 9, display: "flex", gap: 7 }}><button className="soft-btn" onClick={() => onToast("Reprodução iniciada no player de evidência.")}><PlayCircle size={12} /> Reproduzir</button><button className="secondary-btn" onClick={() => onToast("Evidência marcada para auditoria.")}><Archive size={12} /> Arquivar</button></div></div><button className="action-more"><MoreHorizontal size={15} /></button></div>)}</div><div className="panel page-panel"><div className="panel-header"><div><div className="panel-title">Reprodução selecionada</div><div className="panel-subtitle">VTR-2048 · câmera frontal</div></div><button className="icon-btn" onClick={() => onToast("Player maximizado.")}><ArrowUpRight size={14} /></button></div><div style={{ height: 210, borderRadius: 9, background: "linear-gradient(135deg,var(--brand-fill) 0%,#315fa9 48%,#7087b6 49%,var(--brand-border) 100%)", position: "relative", overflow: "hidden", display: "grid", placeItems: "center" }}><div style={{ width: 50, height: 50, borderRadius: "50%", background: "rgba(255,255,255,.9)", display: "grid", placeItems: "center", color: "var(--brand-fill)" }}><PlayCircle size={25} /></div><span style={{ position: "absolute", left: 13, bottom: 11, color: "#fff", fontSize: 9, fontFamily: "DM Mono" }}>00:18 / 00:42</span><span style={{ position: "absolute", right: 13, top: 11, color: "#ffffff", fontSize: 9 }}>CAM 01 · HD</span></div><div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, color: "#8896a3", fontSize: 10 }}><span>14:32:08</span><span>Fadiga · score 92</span><button className="panel-link" onClick={() => onToast("Download preparado.")}><Download size={12} /> Baixar</button></div></div></div></>;
+  return <div className="wsp monitor-wsp">
+    <div className={`wsp-corpo sem-inspetor ${arvore.estado.painelRecolhido ? "nav-recolhida" : ""}`}>
+      <VehicleNavigator
+        configs={configs}
+        selecionado={selectedVehicle}
+        busca={busca}
+        onBusca={onBusca}
+        onLimparBusca={onLimparBusca}
+        onSelecionar={selectVehicle}
+        arvore={arvore}
+      />
+      <section className="monitor-main">
+        <header className="monitor-workspace-toolbar">
+          <div className="monitor-selected">
+            <span className="live-pulse" />
+            <strong>{selectedVehicle}</strong>
+            <span>{selected.driver} · atualizado há 8s</span>
+            <i>{selectedVehicles.length} em foco</i>
+          </div>
+          <div className="monitor-compact-actions">
+            <div className="segmented monitor-mode">
+              <button className={monitorMode === "single" ? "active" : ""} onClick={() => setMonitorMode("single")}>Estação</button>
+              <button className={monitorMode === "mosaic" ? "active" : ""} onClick={() => setMonitorMode("mosaic")}>Mosaico <span>{selectedVehicles.length}</span></button>
+            </div>
+            <button className={`wsp-icone ${selectedInMosaic ? "ativo" : ""}`} title={selectedInMosaic ? "Remover do mosaico" : "Adicionar ao mosaico"} aria-label={selectedInMosaic ? "Remover veículo do mosaico" : "Adicionar veículo ao mosaico"} onClick={() => toggleMosaicVehicle(selectedVehicle)}>{selectedInMosaic ? <Check size={14} /> : <Plus size={14} />}</button>
+            <button className="wsp-icone" title="Filtrar monitoramento" aria-label="Filtrar monitoramento" onClick={() => onToast("Filtros avançados disponíveis: frota, status, risco e câmera.")}><Filter size={14} /></button>
+            <button className="wsp-icone" title="Abrir em outra tela" aria-label="Abrir em outra tela" onClick={openMosaicWindow}><ArrowUpRight size={14} /></button>
+            <button className="wsp-btn primario" onClick={() => onToast("Patrulha iniciada com a seleção atual.")}><PlayCircle size={14} /><span>Patrulha</span></button>
+          </div>
+        </header>
+
+        {monitorMode === "mosaic" ? <div className="monitor-mosaic-pane"><div className="mosaic-inline-wrap"><MosaicDisplay vehicles={mosaicVehicles} /><div className="mosaic-inline-actions"><span><CheckCircle2 size={13} /> {selectedVehicles.length} veículos selecionados</span><button className="soft-btn" onClick={openMosaicWindow}><ArrowUpRight size={13} /> Enviar para TV / monitor</button></div></div></div> : <div className="monitor-workspace monitor-workspace-compact">
+          <section className="monitor-map panel"><div className="monitor-section-head"><div><div className="panel-title">Mapa operacional</div><div className="panel-subtitle">Posição, direção, risco, cercas e pontos de controle da seleção</div></div><div className="map-quick-actions"><button className="icon-btn" onClick={() => onToast("Mapa centralizado na seleção.")}><Target size={14} /></button><button className="icon-btn" onClick={() => onToast("Camadas de cercas e pontos de controle alternadas.")}><Globe2 size={14} /></button></div></div><div className="live-map-stage"><div className="map-river" /><div className="map-road a" /><div className="map-road b" /><div className="map-road c" /><div className="map-road d" /><span className="map-label one">Contagem</span><span className="map-label two">Rio de Janeiro</span><span className="map-label three">Itaguaí</span><span className="map-label four">Seropédica</span>{fleetRows.map((row, i) => <button key={row.vehicle} className={`map-pin ${row.status === "medium" ? "amber" : row.status === "low" ? "teal" : ""} live-pin-${i} ${selectedVehicle === row.vehicle ? "selected-pin" : ""}`} onClick={() => selectVehicle(row.vehicle)}><MapPin size={11} /></button>)}<div className="map-controls"><button className="map-control">+</button><button className="map-control">−</button><button className="map-control"><Target size={13} /></button></div><div className="map-legend"><span><i /> alto risco</span><span><i className="amber" /> atenção</span><span><i className="teal" /> conectado</span></div></div><div className="vehicle-strip"><div className="vehicle-strip-main"><div className="vehicle-avatar"><Truck size={15} /></div><div><strong>{selected.vehicle}</strong><small>{selected.driver} · {selected.speed} · {selected.last} · perfil {selected.perfilAtivo}</small></div></div><span className={`status ${selected.status}`}>{selected.status === "high" ? "Alto risco" : selected.status === "medium" ? "Atenção" : "Monitorado"}</span><button className="panel-link" onClick={() => onSelectRisk(initialRisks.find((risk) => risk.vehicle === selected.vehicle) ?? initialRisks[0])}>Abrir ocorrência <ChevronRight size={12} /></button></div></section>
+          <aside className="camera-wall panel"><div className="camera-wall-head"><div><div className="panel-title">Câmeras do veículo</div><div className="panel-subtitle">{selectedVehicle} · MDVR-0882</div></div><span className="status online">Online</span></div><div className="camera-tabs"><button className="active">Ao vivo</button><button>Playback</button><button>Alarmes <span>3</span></button></div><div className={`camera-grid camera-count-${cameraCount}`}>{Array.from({ length: cameraCount }).map((_, index) => <button className="camera-tile" key={index} onClick={() => onToast(`Câmera ${index + 1} aberta em foco.`)}><div className="camera-art"><span className="camera-scanline" /><PlayCircle size={22} /></div><div className="camera-tile-footer"><span>CAM {String(index + 1).padStart(2, "0")}</span><small>{index === 0 ? "Frontal" : index === 1 ? "Cabine" : index === 2 ? "Traseira" : "Lateral"}</small></div></button>)}</div><div className="camera-controls"><button className="camera-control active" onClick={() => onToast("Áudio do veículo ativado.")}><Headphones size={14} /><span>Áudio</span></button><button className="camera-control" onClick={() => onToast("Intercomunicador pronto para iniciar.")}><Radio size={14} /><span>Intercom</span></button><button className="camera-control" onClick={() => onToast("Captura salva em evidências.")}><Archive size={14} /><span>Capturar</span></button><button className="camera-control danger" onClick={() => onCommand(selectedVehicle)}><ShieldAlert size={14} /><span>Comandos</span></button></div><div className="camera-wall-footer"><span>Grade de câmeras</span><div className="segmented"><button className={cameraCount === 1 ? "active" : ""} onClick={() => setCameraCount(1)}>1</button><button className={cameraCount === 4 ? "active" : ""} onClick={() => setCameraCount(4)}>4</button></div><button className="icon-btn" onClick={() => onToast("Parede de câmeras maximizada.")}><ArrowUpRight size={14} /></button></div></aside>
+        </div>}
+
+        <footer className="monitor-statusbar"><span><CheckCircle2 size={13} /> MDVR conectado</span><span><Radio size={13} /> 184 veículos online</span><span><Video size={13} /> 12 streams ativos</span><span className="statusbar-spacer" /><button onClick={() => onToast("Central de ajuda do operador aberta.")}><Headphones size={13} /> Ajuda rápida</button></footer>
+      </section>
+    </div>
+  </div>;
 }
 
 function ReportsView({ onToast }: { onToast: (message: string) => void }) {
@@ -310,18 +341,99 @@ function FleetView({ view, onToast, onOpenForm }: { view: "fleet" | "drivers" | 
   return <><PageHeader eyebrow={config.eyebrow} title={config.title} description={config.desc} action={config.action} onAction={onOpenForm} />{view === "traffic" ? <div className="segmented" style={{ marginBottom: 16 }}><button className={trafficTab === "devices" ? "active" : ""} onClick={() => setTrafficTab("devices")}><Smartphone size={12} /> Dispositivos e canais</button><button className={trafficTab === "messages" ? "active" : ""} onClick={() => setTrafficTab("messages")}><MessageSquare size={12} /> Mensageria motorista ↔ central</button></div> : null}{view === "traffic" && trafficTab === "messages" ? <MessagingPanel onToast={onToast} /> : <><div className="kpi-grid"><KpiCard label={view === "training" ? "Trilhas ativas" : view === "traffic" ? "Dispositivos online" : "Total cadastrado"} value={view === "training" ? "08" : view === "traffic" ? "184 / 192" : view === "fleet" ? "192" : view === "drivers" ? "218" : "12"} meta="+8,4% no período" icon={Icon} trend="up" /><KpiCard label="Em conformidade" value={view === "drivers" ? "91%" : "87%"} meta="Meta operacional: 85%" icon={CheckCircle2} trend="up" /><KpiCard label="Atenção necessária" value={view === "training" ? "04" : "12"} meta="Priorizados hoje" icon={AlertTriangle} tone="red" trend="down" /><KpiCard label="Última atualização" value="14:32" meta="Sincronização concluída" icon={RefreshCw} /></div><div className="panel"><div className="toolbar"><div className="filters"><button className="secondary-btn"><Filter size={13} /> Filtros</button><label className="search-box" style={{ minWidth: 210, padding: "7px 10px" }}><Search size={13} /><input placeholder={`Buscar ${view === "drivers" ? "motorista" : "registro"}...`} /></label></div><div style={{ display: "flex", gap: 7 }}><button className="secondary-btn" onClick={() => onToast("Exportação preparada.")}><Download size={13} /> Exportar</button><button className="icon-btn" onClick={() => onToast("Tabela atualizada.")}><RefreshCw size={14} /></button></div></div><div className="table-wrap"><table><thead><tr><th>{view === "drivers" ? "MOTORISTA" : view === "training" ? "TRILHA" : "REGISTRO"}</th><th>DETALHES</th><th>GRUPO / VÍNCULO</th><th>SCORE</th><th>STATUS</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.a}><td><div className="vehicle-cell"><div className="vehicle-avatar"><Icon size={14} /></div><div><div className="vehicle-name">{row.a}</div><div className="vehicle-meta">{row.b}</div></div></div></td><td>{row.b}</td><td>{row.c}</td><td><span className="status low">{row.d}</span></td><td><span className={`status ${row.e === "Sem sinal" ? "offline" : row.e === "Contingência" ? "review" : "online"}`}>{row.e}</span></td><td><button className="action-more" onClick={() => onToast(`Abrindo detalhes de ${row.a}.`)}><MoreHorizontal size={15} /></button></td></tr>)}</tbody></table></div></div></>}</>;
 }
 
+type TreatmentHistory = { id: string; text: string; at: string };
+
+function PlaybackRequestModal({ vehicle, onClose, onConfirm }: { vehicle: string; onClose: () => void; onConfirm: (camera: string, duration: number) => void }) {
+  const [duration, setDuration] = useState(10);
+  const [camera, setCamera] = useState("Frontal");
+  const today = new Date().toISOString().slice(0, 10);
+  return <div className="playback-backdrop" onClick={onClose}>
+    <div className="modal playback-modal" role="dialog" aria-modal="true" aria-label="Solicitar playback" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head"><div><div className="modal-title">Solicitar playback</div><div className="modal-desc">Recupere o contexto de vídeo antes e depois do alerta.</div></div><button className="close-btn" aria-label="Fechar solicitação" onClick={onClose}><X size={15} /></button></div>
+      <div className="playback-info"><LifeBuoy size={16} /><span>Serão solicitados <strong>{Math.floor(duration / 2)} segundos antes</strong> e <strong>{Math.ceil(duration / 2)} segundos depois</strong> do evento.</span></div>
+      <div className="playback-form">
+        <label className="playback-field full"><span>Veículo</span><input value={vehicle} readOnly /></label>
+        <label className="playback-field"><span>Tempo de vídeo</span><div className="playback-input-unit"><input type="number" min={5} max={60} value={duration} onChange={(event) => setDuration(Math.max(5, Math.min(60, Number(event.target.value) || 5)))} /><i>segundos</i></div></label>
+        <label className="playback-field"><span>Câmera</span><select value={camera} onChange={(event) => setCamera(event.target.value)}><option>Frontal</option><option>Cabine</option><option>Traseira</option><option>Lateral</option></select></label>
+        <label className="playback-field"><span>Data</span><input type="date" defaultValue={today} /></label>
+        <label className="playback-field"><span>Hora do evento</span><input type="time" step="1" defaultValue="15:26:30" /></label>
+      </div>
+      <div className="playback-availability"><Video size={18} /><div><strong>Franquia disponível</strong><span>O MDVR está online e pode transmitir este intervalo.</span></div><b>{duration}s</b></div>
+      <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" onClick={() => onConfirm(camera, duration)}><Download size={13} /> Solicitar vídeo</button></div>
+    </div>
+  </div>;
+}
+
+function SpeedEvidence({ risk, onPlayback, onToast }: { risk: Risk; onPlayback: () => void; onToast: (message: string) => void }) {
+  return <section className="treatment-evidence speed-evidence" aria-label="Evidência de velocidade">
+    <header><div><span className="treatment-kicker"><Gauge size={13} /> Telemetria · Safety</span><h3>Contexto da condução</h3></div><button className="soft-btn" onClick={() => onToast("Trajeto centralizado no ponto do alerta.")}><Target size={13} /> Centralizar</button></header>
+    <div className="speed-map">
+      <svg viewBox="0 0 620 190" preserveAspectRatio="none" aria-hidden="true"><path className="speed-road" d="M-20 160 C 70 70, 150 145, 235 83 S 390 52, 455 112 S 570 95, 650 28" /><path className="speed-route" d="M25 145 C 100 79, 165 132, 238 83 S 389 54, 454 112 S 535 102, 595 61" /></svg>
+      <span className="speed-pin start"><MapPin size={14} /> início</span><span className="speed-pin alert"><AlertTriangle size={15} /> 96 km/h</span><span className="speed-pin end"><MapPin size={14} /> atual</span>
+      <div className="speed-map-label">{risk.zone}</div>
+    </div>
+    <div className="treatment-metrics"><div><span>Velocidade no alerta</span><strong className="danger-value">96 <small>km/h</small></strong></div><div><span>Limite do trecho</span><strong>80 <small>km/h</small></strong></div><div><span>Excesso</span><strong>+16 <small>km/h</small></strong></div><div><span>Tempo acima do limite</span><strong>00:42</strong></div></div>
+    <div className="evidence-request"><Video size={16} /><div><strong>Confirme o contexto com vídeo</strong><span>Solicite imagens do MDVR no instante da violação.</span></div><button className="primary-btn" onClick={onPlayback}><PlayCircle size={13} /> Solicitar playback</button></div>
+  </section>;
+}
+
+function CameraEvidence({ risk, activeCamera, playing, onCamera, onPlay, onExport }: { risk: Risk; activeCamera: number; playing: boolean; onCamera: (camera: number) => void; onPlay: () => void; onExport: () => void }) {
+  const cameras = ["Frontal", "Cabine", "Traseira", "Lateral", "Auxiliar"];
+  return <section className="treatment-evidence camera-evidence" aria-label="Evidência de câmera">
+    <header><div><span className="treatment-kicker"><Video size={13} /> Vídeo do alerta · disponível</span><h3>Evidência capturada pelo MDVR</h3></div><button className="soft-btn" onClick={onExport}><Download size={13} /> Exportar evidência</button></header>
+    <div className="evidence-camera-grid">
+      {cameras.map((camera, index) => <button key={camera} className={`evidence-camera-tile camera-scene-${index + 1} ${activeCamera === index ? "active" : ""}`} onClick={() => onCamera(index)} aria-label={`Selecionar câmera ${camera}`}><span className="camera-horizon" /><span className="camera-lane one" /><span className="camera-lane two" />{index === 1 ? <span className="driver-silhouette" /> : null}<span className="camera-stamp">CAM {index + 1} · {camera}</span>{activeCamera === index ? <span className="camera-play" onClick={(event) => { event.stopPropagation(); onPlay(); }}><PlayCircle size={22} />{playing ? <small>00:08 / 00:15</small> : <small>Reproduzir</small>}</span> : null}</button>)}
+    </div>
+    <div className="camera-evidence-foot"><span><CheckCircle2 size={13} /> Evento protegido contra sobrescrita</span><span>{risk.vehicle} · {risk.time}</span></div>
+  </section>;
+}
+
 function DetailDrawer({ risk, onClose, onToast, onUpdate, onCommand }: { risk: Risk; onClose: () => void; onToast: (message: string) => void; onUpdate: (id: string, patch: Partial<Risk>) => void; onCommand: (vehicle: string) => void }) {
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState(risk.status);
+  const [playbackOpen, setPlaybackOpen] = useState(false);
+  const [activeCamera, setActiveCamera] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [history, setHistory] = useState<TreatmentHistory[]>([]);
   const equipamento = equipamentoDe(risk.vehicle);
+  const normalizedTitle = risk.title.toLocaleLowerCase("pt-BR");
+  const speedAlert = risk.categoriaRisco === "safety" && normalizedTitle.includes("velocidade");
+  const cameraAlert = risk.categoriaRisco === "safety" && /(fadiga|celular|cigarro|câmera|camera|distração|visibilidade|olhos)/i.test(normalizedTitle);
+  const addHistory = (text: string) => setHistory((current) => [{ id: newId("AT"), text, at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) }, ...current]);
+  const executeAction = (message: string, nextStatus = "Em tratamento") => { setStatus(nextStatus); addHistory(message); onToast(message); };
   const saveTreatment = () => {
     const nextStatus = status;
     onUpdate(risk.id, { status: nextStatus });
-    try { window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify({ event: risk.id, action: "treatment", status: nextStatus, comment, at: new Date().toISOString() })); } catch { /* localStorage opcional */ }
+    try { window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify({ event: risk.id, action: "treatment", status: nextStatus, comment, history, at: new Date().toISOString() })); } catch { /* localStorage opcional */ }
     onToast(comment ? "Tratamento e comentário registrados." : "Tratamento registrado com sucesso.");
     onClose();
   };
-  return <div className="modal-backdrop risk-drawer-backdrop" onClick={onClose}><div className="modal risk-drawer" role="dialog" aria-modal="true" aria-label={`Detalhe do alerta ${risk.id}`} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="modal-title">Detalhe do risco</div><div className="modal-desc">Evento {risk.id} · correlação de telemetria, política embarcada e evidência</div></div><button className="close-btn" aria-label="Fechar detalhe" onClick={onClose}><X size={15} /></button></div><div className="detail-hero" style={{ margin: 0, borderRadius: 10 }}><div className="detail-kicker">{status} · {risk.natureza === "condicao" ? "condição" : "marco"}</div><div className="detail-title">{risk.title}</div><div className="detail-sub">{risk.vehicle} · {risk.driver}</div><div className="detail-score"><strong>{risk.score}</strong><span>score de risco</span></div></div><div className="detail-section"><div className="detail-label">Contexto</div><div className="detail-text">{risk.detail}</div></div><div className="detail-section"><div className="detail-grid"><div><div className="detail-label">Localização</div><div className="detail-value">{risk.zone}</div></div><div><div className="detail-label">Detectado</div><div className="detail-value">{risk.time}</div></div><div><div className="detail-label">Perfil operacional ativo</div><div className="detail-value">{risk.perfilAtivo}</div></div><div><div className="detail-label">Ponto de controle</div><div className="detail-value">{risk.pontoDeControle ?? "Fora de ponto de controle"}</div></div><div><div className="detail-label">Equipamento</div><div className="detail-value">{equipamento.equipamento} · {equipamento.linha}</div></div><div><div className="detail-label">Canal</div><div className="detail-value">{equipamento.canal === "sem_sinal" ? "Sem sinal" : equipamento.canal === "celular" ? "Celular" : "Contingência"}</div></div></div></div><div className="detail-section"><div className="detail-label">Fluxo operacional</div><div className="detail-actions"><button className="primary-btn" onClick={() => onCommand(risk.vehicle)}><Terminal size={13} /> Comandos ao veículo</button><button className="soft-btn" onClick={() => onToast("Evidência solicitada ao MDVR.")}><Video size={13} /> Solicitar evidência</button><button className="secondary-btn" onClick={() => onToast("Localização focada no mapa operacional.")}><MapPin size={13} /> Ver localização</button></div><div className="form-hint">Comandos delegados habilitam um botão para o motorista; a central não atua diretamente na trava.</div></div><div className="detail-section"><div className="detail-label">Tratamento e auditoria</div><select className="filter-select" style={{ width: "100%", marginBottom: 9 }} value={status} onChange={(e) => setStatus(e.target.value)}><option>Novo</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select><textarea className="form-field" style={{ width: "100%", border: "1px solid var(--n-4)", background: "var(--surface)", color: "var(--n-8)", borderRadius: 7, padding: 9, fontSize: 11, minHeight: 56, resize: "vertical" }} placeholder="Adicionar comentário do tratamento..." value={comment} onChange={(e) => setComment(e.target.value)} /><div className="audit-note">Cada alteração registra responsável, horário, status e comentário para auditoria.</div></div><div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Fechar</button><button className="primary-btn" onClick={saveTreatment}><Check size={13} /> Salvar tratamento</button></div></div></div>;
+  const confirmPlayback = (camera: string, duration: number) => { setPlaybackOpen(false); executeAction(`Playback de ${duration}s solicitado à câmera ${camera}.`); };
+
+  return <>
+    <div className="modal-backdrop risk-drawer-backdrop" onClick={onClose}><div className="modal risk-drawer" role="dialog" aria-modal="true" aria-label={`Detalhe do alerta ${risk.id}`} onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head"><div><div className="modal-title">Tratativa do alerta</div><div className="modal-desc">{risk.id} · {risk.categoriaRisco === "safety" ? "Safety" : "Security"} · {equipamento.equipamento}</div></div><button className="close-btn" aria-label="Fechar detalhe" onClick={onClose}><X size={15} /></button></div>
+      <div className="detail-hero treatment-hero"><div><div className="detail-kicker">{status} · {risk.natureza === "condicao" ? "condição" : "marco"}</div><div className="detail-title">{risk.title}</div><div className="detail-sub">{risk.vehicle} · {risk.driver} · {risk.zone}</div></div><div className="detail-score"><strong>{risk.score}</strong><span>score de risco</span></div></div>
+      <div className="treatment-context"><div><span>Detectado</span><strong>{risk.time}</strong></div><div><span>Perfil ativo</span><strong>{risk.perfilAtivo}</strong></div><div><span>Canal</span><strong>{equipamento.canal === "sem_sinal" ? "Sem sinal" : equipamento.canal === "celular" ? "Celular" : "Contingência"}</strong></div><div><span>Ponto de controle</span><strong>{risk.pontoDeControle ?? "Fora de ponto"}</strong></div></div>
+      <div className="treatment-description"><AlertTriangle size={15} /><p>{risk.detail}</p></div>
+
+      {speedAlert ? <SpeedEvidence risk={risk} onPlayback={() => setPlaybackOpen(true)} onToast={onToast} /> : cameraAlert ? <CameraEvidence risk={risk} activeCamera={activeCamera} playing={playing} onCamera={(camera) => { setActiveCamera(camera); setPlaying(false); }} onPlay={() => setPlaying((current) => !current)} onExport={() => executeAction("Evidência de vídeo exportada e vinculada ao alerta.")} /> : <section className="treatment-evidence generic-evidence"><header><div><span className="treatment-kicker"><ShieldAlert size={13} /> Contexto operacional</span><h3>Dados correlacionados do alerta</h3></div></header><div className="detail-grid"><div><div className="detail-label">Equipamento</div><div className="detail-value">{equipamento.equipamento} · {equipamento.linha}</div></div><div><div className="detail-label">Localização</div><div className="detail-value">{risk.zone}</div></div></div></section>}
+
+      <section className="detail-section treatment-actions-section"><div className="detail-label">Ações recomendadas</div><div className="detail-actions">
+        <button className="primary-btn" onClick={() => executeAction("Contato com o motorista iniciado por intercom.")}><Headphones size={13} /> Ligar para motorista</button>
+        {speedAlert ? <button className="soft-btn" onClick={() => setPlaybackOpen(true)}><Video size={13} /> Solicitar playback</button> : null}
+        {cameraAlert ? <button className="soft-btn" onClick={() => executeAction("Assistência operacional acionada para o motorista.")}><LifeBuoy size={13} /> Acionar assistência</button> : null}
+        <button className="secondary-btn" onClick={() => onCommand(risk.vehicle)}><Terminal size={13} /> Comandos</button>
+        <button className="secondary-btn" onClick={() => executeAction("Alerta validado pelo operador.")}><CheckCircle2 size={13} /> Validar alerta</button>
+      </div></section>
+
+      <section className="detail-section treatment-history"><div className="detail-section-heading"><div className="detail-label">Histórico de ações</div><span>{history.length} registro(s)</span></div>{history.length ? <div className="timeline">{history.map((item) => <div className="timeline-item" key={item.id}><span className="timeline-dot" /><div className="timeline-copy"><strong>{item.text}</strong><time>User Teste · {item.at}</time></div></div>)}</div> : <div className="treatment-empty"><Clock3 size={16} /> Nenhuma ação realizada neste atendimento.</div>}</section>
+
+      <section className="detail-section treatment-audit"><div className="detail-label">Conclusão e auditoria</div><div className="treatment-form-row"><label><span>Status</span><select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)}><option>Novo</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select></label><label className="comment-field"><span>Comentário do operador</span><textarea placeholder="Descreva a conclusão ou orientação..." value={comment} onChange={(e) => setComment(e.target.value)} /></label></div><div className="audit-note">Toda ação registra operador, horário, evidência consultada e mudança de status.</div></section>
+      <div className="modal-actions risk-drawer-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" onClick={saveTreatment}><Check size={13} /> Salvar tratativa</button></div>
+    </div></div>
+    {playbackOpen ? <PlaybackRequestModal vehicle={risk.vehicle} onClose={() => setPlaybackOpen(false)} onConfirm={confirmPlayback} /> : null}
+  </>;
 }
 
 function EntityModal({ kind, onClose, onToast }: { kind: "fleet" | "drivers" | "training" | "traffic" | "settings"; onClose: () => void; onToast: (message: string) => void }) {
@@ -371,9 +483,10 @@ function MainApp() {
   const entityView = activeView as "fleet" | "drivers" | "training" | "traffic" | "settings";
   const body = activeView === "dashboard" ? <Dashboard search={search} onSelectRisk={openRisk} onToast={notify} onNavigate={chooseView} />
     : activeView === "risks" ? <RiskKanbanView risks={risks} search={search} onSelectRisk={openRisk} onCommand={openCommand} onUpdate={updateRisk} onAddRisk={(risk) => setRisks((current) => [risk, ...current])} onToast={notify} />
-    : activeView === "events" ? <EventsView pontos={pontos} onToast={notify} onCommand={openCommand} />
-    : activeView === "realtime" ? <RealtimeView onSelectRisk={openRisk} onToast={notify} onCommand={openCommand} />
-    : activeView === "evidence" ? <EvidenceView onToast={notify} />
+    : activeView === "events" ? <EventsView pontos={pontos} configs={configs} search={search} onToast={notify} />
+    : activeView === "realtime" ? <RealtimeView configs={configs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onSelectRisk={openRisk} onToast={notify} onCommand={openCommand} />
+    : activeView === "evidence" ? <EvidenceView configs={configs} search={search} onToast={notify} />
+    : activeView === "journey" ? <JourneyView search={search} onToast={notify} />
     : activeView === "reports" ? <ReportsView onToast={notify} />
     : activeView === "profiles" ? <ProfilesView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
     : activeView === "equipment" ? <EquipmentConfigView configs={configs} setConfigs={setConfigs} veiculo={veiculo} arvore={arvore} busca={search} onBusca={setSearch} onLimparBusca={() => setSearch("")} onToast={notify} VehicleNavigator={VehicleNavigator} />
@@ -383,7 +496,7 @@ function MainApp() {
     : activeView === "provisioning" ? <ProvisioningView pontos={pontos} onToast={notify} />
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;
-  const emWorkspace = activeView === "profiles" || activeView === "equipment" || activeView === "controlpoints" || activeView === "fences";
+  const emWorkspace = activeView === "realtime" || activeView === "profiles" || activeView === "equipment" || activeView === "controlpoints" || activeView === "fences";
   const contentClass = emWorkspace
     ? "content content-workspace profile-topbar"
     : activeView === "dashboard"

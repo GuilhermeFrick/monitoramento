@@ -1,62 +1,81 @@
 import { useMemo, useState } from "react";
-import { Activity, Check, Clock3, Flag, History, MapPin, MessageSquare, Pencil, Satellite, ShieldAlert, WifiOff, Terminal, Waypoints, X, Zap } from "lucide-react";
-import { Callout, KpiCard, Modal, PageHeader, Tag, formatDateTime, formatTime, useStoredState, type IconType } from "../shared";
-import { STORAGE, canalLabel, eventosIniciais, newId, nomePonto, type Comentario, type Evento, type PontoDeControle } from "../domain";
+import { Activity, CalendarDays, Clock3, Download, Flag, History, MapPin, ShieldAlert, Terminal, Waypoints, WifiOff, X, Zap } from "lucide-react";
+import { PageHeader, Tag, formatDateTime, formatTime, useStoredState, type IconType } from "../shared";
+import { STORAGE, canalLabel, eventosIniciais, nomePonto, type ConfiguracaoVeiculo, type Evento, type PontoDeControle } from "../domain";
 
 const tipoIcon: Record<Evento["tipo"], IconType> = { sensor: ShieldAlert, ponto: MapPin, rotograma: Clock3, rota: Waypoints, sinal: WifiOff, coacao: ShieldAlert, comando: Terminal, macro: Zap, comportamento: Activity };
 const ATRASO_MIN = 2;
-const atrasado = (e: Evento) => (new Date(e.receivedAt).getTime() - new Date(e.occurredAt).getTime()) / 60000 > ATRASO_MIN;
+const atrasado = (evento: Evento) => (new Date(evento.receivedAt).getTime() - new Date(evento.occurredAt).getTime()) / 60000 > ATRASO_MIN;
+const csvValue = (value: string | number | null | undefined) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
-export function EventsView({ pontos, onToast, onCommand }: { pontos: PontoDeControle[]; onToast: (message: string) => void; onCommand: (veiculo: string) => void }) {
-  const [eventos, setEventos] = useStoredState<Evento[]>(STORAGE.eventos, eventosIniciais);
+export function EventsView({ pontos, configs, search, onToast }: { pontos: PontoDeControle[]; configs: ConfiguracaoVeiculo[]; search: string; onToast: (message: string) => void }) {
+  const [eventos] = useStoredState<Evento[]>(STORAGE.eventos, eventosIniciais);
+  const availableDates = useMemo(() => eventos.map((evento) => evento.occurredAt.slice(0, 10)).sort(), [eventos]);
+  const [startDate, setStartDate] = useState(() => availableDates[0] ?? "2026-09-01");
+  const [endDate, setEndDate] = useState(() => availableDates.at(-1) ?? "2026-09-15");
+  const [fleet, setFleet] = useState("todas");
+  const [vehicle, setVehicle] = useState("todos");
+  const [eventType, setEventType] = useState<"todos" | Evento["tipo"]>("todos");
+  const [severity, setSeverity] = useState<"todas" | Evento["severidade"]>("todas");
+  const [nature, setNature] = useState<"todos" | "condicao" | "marco" | "atrasados">("todos");
   const [perfilGestao, setPerfilGestao] = useState(true);
-  const [filtro, setFiltro] = useState<"todos" | "condicao" | "marco" | "atrasados">("todos");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const visiveis = useMemo(() => eventos.filter((e) => perfilGestao || e.tipo !== "coacao").filter((e) => filtro === "todos" || (filtro === "atrasados" ? atrasado(e) : e.natureza === filtro)).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)), [eventos, filtro, perfilGestao]);
-  const selected = eventos.find((e) => e.id === selectedId) ?? null;
-  const abertas = eventos.filter((e) => e.natureza === "condicao" && !e.encerradoEm).length;
 
-  const addComentario = (id: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: [...e.comentarios, { id: newId("c"), texto, autor: "User Teste", criadoEm: new Date().toISOString() }] } : e)); onToast("Comentário registrado."); };
-  const editComentario = (id: string, cid: string, texto: string) => { setEventos((c) => c.map((e) => e.id === id ? { ...e, comentarios: e.comentarios.map((k) => k.id === cid ? { ...k, texto, editadoPor: "User Teste", editadoEm: new Date().toISOString() } : k) } : e)); onToast("Comentário editado com registro de autoria e horário."); };
+  const fleetByVehicle = useMemo(() => new Map(configs.map((config) => [config.veiculo, config.frota])), [configs]);
+  const fleets = useMemo(() => Array.from(new Set(configs.map((config) => config.frota))).sort(), [configs]);
+  const vehicles = useMemo(() => Array.from(new Set(eventos.filter((evento) => fleet === "todas" || fleetByVehicle.get(evento.veiculo) === fleet).map((evento) => evento.veiculo))).sort(), [eventos, fleet, fleetByVehicle]);
+  const visibleEvents = useMemo(() => eventos
+    .filter((evento) => { const date = evento.occurredAt.slice(0, 10); return (!startDate || date >= startDate) && (!endDate || date <= endDate); })
+    .filter((evento) => fleet === "todas" || fleetByVehicle.get(evento.veiculo) === fleet)
+    .filter((evento) => vehicle === "todos" || evento.veiculo === vehicle)
+    .filter((evento) => eventType === "todos" || evento.tipo === eventType)
+    .filter((evento) => severity === "todas" || evento.severidade === severity)
+    .filter((evento) => perfilGestao || evento.tipo !== "coacao")
+    .filter((evento) => nature === "todos" || (nature === "atrasados" ? atrasado(evento) : evento.natureza === nature))
+    .filter((evento) => `${evento.titulo} ${evento.veiculo} ${evento.motorista} ${evento.detalhe}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR")))
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)), [endDate, eventType, eventos, fleet, fleetByVehicle, nature, perfilGestao, search, severity, startDate, vehicle]);
+
+  const openConditions = visibleEvents.filter((evento) => evento.natureza === "condicao" && !evento.encerradoEm).length;
+  const delayed = visibleEvents.filter(atrasado).length;
+  const signalLoss = visibleEvents.filter((evento) => evento.tipo === "sinal" && !evento.encerradoEm).length;
+  const coercion = visibleEvents.filter((evento) => evento.tipo === "coacao").length;
+  const hasFilters = fleet !== "todas" || vehicle !== "todos" || eventType !== "todos" || severity !== "todas" || nature !== "todos" || !perfilGestao || startDate !== availableDates[0] || endDate !== availableDates.at(-1);
+
+  const clearFilters = () => {
+    setStartDate(availableDates[0] ?? ""); setEndDate(availableDates.at(-1) ?? "");
+    setFleet("todas"); setVehicle("todos"); setEventType("todos"); setSeverity("todas"); setNature("todos"); setPerfilGestao(true);
+  };
+
+  const exportReport = () => {
+    if (!visibleEvents.length) { onToast("Não há eventos no filtro atual para exportar."); return; }
+    const header = ["Evento", "Data do fato", "Data de recebimento", "Veículo", "Motorista", "Frota", "Tipo", "Natureza", "Severidade", "Perfil ativo", "Ponto de controle", "Status", "Detalhe"];
+    const rows = visibleEvents.map((evento) => [evento.id, formatDateTime(evento.occurredAt), formatDateTime(evento.receivedAt), evento.veiculo, evento.motorista, fleetByVehicle.get(evento.veiculo) ?? "Outros veículos", evento.tipo, evento.natureza, evento.severidade, evento.perfilAtivo, evento.pontoDeControle ? nomePonto(evento.pontoDeControle, pontos) : "", evento.encerradoEm ? "Encerrado" : evento.natureza === "condicao" ? "Em curso" : "Registrado", evento.detalhe]);
+    const csv = `\uFEFF${[header, ...rows].map((row) => row.map(csvValue).join(";")).join("\n")}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `relatorio-eventos-${startDate || "inicio"}-${endDate || "fim"}.csv`; anchor.click(); URL.revokeObjectURL(url);
+    onToast(`Relatório gerado com ${visibleEvents.length} evento(s).`);
+  };
 
   return <>
-    <PageHeader eyebrow="Timeline do fato" title="Eventos" description="Ordenados pelo instante em que ocorreram, não pela chegada. Condições têm início e fim; marcos acontecem num instante." />
-    <div className="kpi-grid"><KpiCard label="Condições abertas" value={String(abertas).padStart(2, "0")} meta="Com início e sem fim" icon={Activity} tone="red" /><KpiCard label="Entregues com atraso" value={String(eventos.filter(atrasado).length).padStart(2, "0")} meta="Chegaram após reconexão" icon={History} tone="amber" /><KpiCard label="Perda de sinal" value={String(eventos.filter((e) => e.tipo === "sinal" && !e.encerradoEm).length).padStart(2, "0")} meta="Com última posição conhecida" icon={WifiOff} tone="amber" /><KpiCard label="Coação" value={perfilGestao ? String(eventos.filter((e) => e.tipo === "coacao").length).padStart(2, "0") : "—"} meta={perfilGestao ? "Visível só na gestão de risco" : "Oculto neste perfil"} icon={ShieldAlert} tone="red" /></div>
-    <div className="panel" style={{ padding: 0 }}>
-      <div className="toolbar"><div className="segmented"><button className={filtro === "todos" ? "active" : ""} onClick={() => setFiltro("todos")}>Todos</button><button className={filtro === "condicao" ? "active" : ""} onClick={() => setFiltro("condicao")}>Condições</button><button className={filtro === "marco" ? "active" : ""} onClick={() => setFiltro("marco")}>Marcos</button><button className={filtro === "atrasados" ? "active" : ""} onClick={() => setFiltro("atrasados")}>Entregues com atraso</button></div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 10, color: "var(--n-6)" }}>{visiveis.length} eventos · por instante do fato</span><div className="segmented" title="Simula qual UI está aberta: coação só aparece na gestão de risco"><button className={perfilGestao ? "active" : ""} onClick={() => setPerfilGestao(true)}>UI gestão de risco</button><button className={!perfilGestao ? "active" : ""} onClick={() => setPerfilGestao(false)}>UI operacional</button></div></div></div>
-      <div className="event-list">{visiveis.map((e) => { const Icon = tipoIcon[e.tipo]; const late = atrasado(e); return <button key={e.id} className={`event-card ${e.natureza} ${e.tipo === "coacao" ? "duress" : ""} ${e.tipo === "sinal" ? "signal" : ""}`} onClick={() => setSelectedId(e.id)}>
-        <div className="event-time"><strong>{formatTime(e.occurredAt)}</strong><small>{new Date(e.occurredAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</small>{late ? <span className="late-badge" title={`Recebido ${formatDateTime(e.receivedAt)}`}><History size={10} /> atrasado</span> : <span className="rt-badge">tempo real</span>}</div>
-        <div className={`event-shape ${e.natureza}`}>{e.natureza === "condicao" ? <span className={`cond-bar ${e.encerradoEm ? "closed" : "open"}`}><i /><i /></span> : <span className="marco-dot"><Flag size={9} /></span>}</div>
-        <div className="event-body"><div className="event-title"><Icon size={13} /> {e.titulo}{e.tipo === "coacao" ? <Tag tone="red">coação · canal restrito</Tag> : null}{e.tipo === "sinal" ? <Tag tone="amber">perda de sinal</Tag> : null}<Tag tone={e.natureza === "condicao" ? (e.encerradoEm ? "neutral" : "amber") : "blue"}>{e.natureza === "condicao" ? (e.encerradoEm ? `condição · encerrada ${formatTime(e.encerradoEm)}` : "condição · em curso") : "marco"}</Tag></div><div className="event-meta">{e.veiculo} · {e.motorista} · perfil {e.perfilAtivo}{e.pontoDeControle ? ` · ${nomePonto(e.pontoDeControle, pontos)}` : ""}{e.canalContingencia && e.canalContingencia !== "sem_sinal" ? ` · via ${canalLabel[e.canalContingencia]}` : ""}</div>{e.ultimaPosicao ? <div className="event-lastpos"><MapPin size={11} /> Última posição conhecida: {e.ultimaPosicao}</div> : null}</div>
-        <div className="event-side">{e.comentarios.length ? <span className="event-comments"><MessageSquare size={11} /> {e.comentarios.length}</span> : null}<Tag tone={e.severidade === "alta" ? "red" : e.severidade === "media" ? "amber" : "teal"}>{e.severidade}</Tag></div>
-      </button>; })}{visiveis.length === 0 ? <div className="empty-note">Nenhum evento neste filtro.</div> : null}</div>
-    </div>
-    {selected ? <EventDetail evento={selected} pontos={pontos} onClose={() => setSelectedId(null)} onAdd={(t) => addComentario(selected.id, t)} onEdit={(cid, t) => editComentario(selected.id, cid, t)} onCommand={() => { setSelectedId(null); onCommand(selected.veiculo); }} /> : null}
+    <PageHeader eyebrow="Histórico operacional" title="Eventos" description="Consulte o histórico pelo instante do fato, veículo e período. Condições têm início e fim; marcos registram um instante." action="Exportar relatório" actionIcon={Download} onAction={exportReport} />
+    <section className="event-history-filters" aria-label="Filtros do histórico">
+      <div className="event-filter-period"><CalendarDays size={14} /><label><span>De</span><input type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} /></label><i>até</i><label><span>Até</span><input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} /></label></div>
+      <label className="event-filter-field"><span>Frota</span><select value={fleet} onChange={(event) => { setFleet(event.target.value); setVehicle("todos"); }}><option value="todas">Todas as frotas</option>{fleets.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label className="event-filter-field"><span>Veículo</span><select value={vehicle} onChange={(event) => setVehicle(event.target.value)}><option value="todos">Todas as placas</option>{vehicles.map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label className="event-filter-field"><span>Tipo</span><select value={eventType} onChange={(event) => setEventType(event.target.value as typeof eventType)}><option value="todos">Todos os tipos</option><option value="sensor">Sensor</option><option value="comportamento">Comportamento</option><option value="ponto">Ponto de controle</option><option value="rotograma">Rotograma</option><option value="rota">Rota</option><option value="sinal">Sinal</option><option value="macro">Macro</option><option value="comando">Comando</option><option value="coacao">Coação</option></select></label>
+      <label className="event-filter-field"><span>Severidade</span><select value={severity} onChange={(event) => setSeverity(event.target.value as typeof severity)}><option value="todas">Todas</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></label>
+      <button className={`event-sensitive-filter ${perfilGestao ? "active" : ""}`} onClick={() => setPerfilGestao((current) => !current)} title="Eventos de coação são restritos à gestão de risco"><ShieldAlert size={13} /><span>Coação</span></button>
+      {hasFilters ? <button className="event-clear-filters" onClick={clearFilters}><X size={12} /> Limpar</button> : null}
+    </section>
+    <section className="event-history-summary" aria-label="Resumo do período"><div><Activity size={14} /><span>Condições abertas</span><strong>{String(openConditions).padStart(2, "0")}</strong></div><div><History size={14} /><span>Recebidos com atraso</span><strong>{String(delayed).padStart(2, "0")}</strong></div><div><WifiOff size={14} /><span>Perda de sinal</span><strong>{String(signalLoss).padStart(2, "0")}</strong></div><div><ShieldAlert size={14} /><span>Coação</span><strong>{perfilGestao ? String(coercion).padStart(2, "0") : "—"}</strong></div></section>
+    <section className="panel event-history-panel">
+      <header className="event-history-toolbar"><div className="segmented"><button className={nature === "todos" ? "active" : ""} onClick={() => setNature("todos")}>Todos</button><button className={nature === "condicao" ? "active" : ""} onClick={() => setNature("condicao")}>Condições</button><button className={nature === "marco" ? "active" : ""} onClick={() => setNature("marco")}>Marcos</button><button className={nature === "atrasados" ? "active" : ""} onClick={() => setNature("atrasados")}><History size={11} /> Atrasados</button></div><div><strong>{visibleEvents.length}</strong> evento(s) encontrado(s)<span>Ordenados pelo instante do fato</span></div></header>
+      <div className="event-list event-history-list">{visibleEvents.map((evento) => { const Icon = tipoIcon[evento.tipo]; const late = atrasado(evento); const eventFleet = fleetByVehicle.get(evento.veiculo) ?? "Outros veículos"; return <article key={evento.id} className={`event-card ${evento.natureza} ${evento.tipo === "coacao" ? "duress" : ""} ${evento.tipo === "sinal" ? "signal" : ""}`}>
+        <div className="event-vehicle-cell"><span className="event-vehicle-badge">{evento.veiculo}</span><span><strong>{evento.motorista}</strong><small>{eventFleet}</small></span></div>
+        <div className="event-time"><strong>{formatTime(evento.occurredAt)}</strong><small>{new Date(evento.occurredAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}</small>{late ? <span className="late-badge" title={`Recebido ${formatDateTime(evento.receivedAt)}`}><History size={10} /> atrasado</span> : <span className="rt-badge">tempo real</span>}</div>
+        <div className={`event-shape ${evento.natureza}`}>{evento.natureza === "condicao" ? <span className={`cond-bar ${evento.encerradoEm ? "closed" : "open"}`}><i /><i /></span> : <span className="marco-dot"><Flag size={9} /></span>}</div>
+        <div className="event-body"><div className="event-title"><Icon size={13} /> {evento.titulo}{evento.tipo === "coacao" ? <Tag tone="red">coação · canal restrito</Tag> : null}{evento.tipo === "sinal" ? <Tag tone="amber">perda de sinal</Tag> : null}<Tag tone={evento.natureza === "condicao" ? (evento.encerradoEm ? "neutral" : "amber") : "blue"}>{evento.natureza === "condicao" ? (evento.encerradoEm ? `encerrada ${formatTime(evento.encerradoEm)}` : "em curso") : "marco"}</Tag></div><div className="event-meta">Perfil {evento.perfilAtivo}{evento.pontoDeControle ? ` · ${nomePonto(evento.pontoDeControle, pontos)}` : ""}{evento.canalContingencia && evento.canalContingencia !== "sem_sinal" ? ` · via ${canalLabel[evento.canalContingencia]}` : ""}</div>{evento.ultimaPosicao ? <div className="event-lastpos"><MapPin size={11} /> Última posição: {evento.ultimaPosicao}</div> : null}</div>
+        <div className="event-side"><Tag tone={evento.severidade === "alta" ? "red" : evento.severidade === "media" ? "amber" : "teal"}>{evento.severidade}</Tag></div>
+      </article>; })}{visibleEvents.length === 0 ? <div className="events-empty"><Activity size={22} /><strong>Nenhum evento encontrado</strong><span>Ajuste o período ou remova alguns filtros.</span></div> : null}</div>
+    </section>
   </>;
-}
-
-function EventDetail({ evento, pontos, onClose, onAdd, onEdit, onCommand }: { evento: Evento; pontos: PontoDeControle[]; onClose: () => void; onAdd: (t: string) => void; onEdit: (cid: string, t: string) => void; onCommand: () => void }) {
-  const [texto, setTexto] = useState("");
-  const [editing, setEditing] = useState<Comentario | null>(null);
-  const late = atrasado(evento);
-  return <Modal title={evento.titulo} description={`${evento.id} · ${evento.veiculo} · ${evento.motorista}`} onClose={onClose}>
-    <div className="detail-grid" style={{ marginBottom: 12 }}><div><div className="detail-label">Ocorreu em</div><div className="detail-value">{formatDateTime(evento.occurredAt)}</div></div><div><div className="detail-label">Recebido em</div><div className="detail-value">{formatDateTime(evento.receivedAt)}{late ? <Tag tone="amber">atrasado</Tag> : null}</div></div><div><div className="detail-label">Natureza</div><div className="detail-value">{evento.natureza === "condicao" ? (evento.encerradoEm ? `Condição · encerrada ${formatTime(evento.encerradoEm)}` : "Condição · em curso") : "Marco"}</div></div><div><div className="detail-label">Perfil ativo</div><div className="detail-value">{evento.perfilAtivo}{evento.pontoDeControle ? ` · ${nomePonto(evento.pontoDeControle, pontos)}` : ""}</div></div></div>
-    {evento.tipo === "coacao" ? <Callout tone="danger" icon={ShieldAlert} title="Evento de coação">Roteado exclusivamente para a gestão de risco. Não responda pelo canal de mensagens do veículo: o motorista pode estar acompanhado.</Callout> : null}
-    {evento.tipo === "sinal" ? <Callout tone="warn" icon={Satellite} title="Perda de sinal é evento, não ausência de dados">Última posição conhecida: {evento.ultimaPosicao}. {evento.canalContingencia === "sem_sinal" ? "Sem canal de contingência configurado para este perfil." : ""}</Callout> : null}
-    <div className="detail-section"><div className="detail-label">Detalhe</div><div className="detail-text">{evento.detalhe}</div></div>
-    <div className="detail-section"><div className="detail-label">Comentários e auditoria</div>{evento.comentarios.length === 0 ? <div className="form-hint">Sem comentários.</div> : null}{evento.comentarios.map((c) => <div key={c.id} className="comment"><div className="comment-text">{c.texto}</div><div className="comment-meta">{c.autor} · {formatDateTime(c.criadoEm)}{c.editadoPor ? <span className="edited"> · editado por {c.editadoPor} em {formatDateTime(c.editadoEm!)}</span> : null}<button className="panel-link" onClick={() => setEditing(c)}><Pencil size={10} /> editar</button></div></div>)}
-      <div style={{ display: "flex", gap: 7, marginTop: 8 }}><input className="form-input" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Novo comentário" /><button className="soft-btn" disabled={!texto.trim()} onClick={() => { onAdd(texto.trim()); setTexto(""); }}><Check size={12} /></button></div>
-    </div>
-    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Fechar</button>{evento.tipo !== "coacao" ? <button className="primary-btn" onClick={onCommand}><Terminal size={13} /> Comandos ao veículo</button> : null}</div>
-    {editing ? <EditCommentModal comentario={editing} onClose={() => setEditing(null)} onConfirm={(t) => { onEdit(editing.id, t); setEditing(null); }} /> : null}
-  </Modal>;
-}
-
-function EditCommentModal({ comentario, onClose, onConfirm }: { comentario: Comentario; onClose: () => void; onConfirm: (t: string) => void }) {
-  const [texto, setTexto] = useState(comentario.texto);
-  const [senha, setSenha] = useState("");
-  return <div className="modal-backdrop nested" onClick={onClose}><div className="modal" onClick={(e) => e.stopPropagation()}><div className="modal-head"><div><div className="modal-title">Editar comentário histórico</div><div className="modal-desc">Exige autorização. O registro original de {comentario.autor} não é sobrescrito silenciosamente: fica quem editou e quando.</div></div><button className="close-btn" onClick={onClose}><X size={15} /></button></div>
-    <div className="form-field"><label>Texto</label><textarea value={texto} onChange={(e) => setTexto(e.target.value)} /></div>
-    <div className="form-field"><label>Senha do operador para autorizar</label><input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••" /><div className="form-hint">Demonstrativo: qualquer senha com 4+ caracteres autoriza.</div></div>
-    <div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Cancelar</button><button className="primary-btn" disabled={senha.length < 4 || !texto.trim() || texto.trim() === comentario.texto} onClick={() => onConfirm(texto.trim())}><Check size={13} /> Autorizar edição</button></div></div></div>;
 }
