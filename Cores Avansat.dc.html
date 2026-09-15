@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#FFFFFF; color:#333333; font-family:Karla, system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#60397E; text-decoration:none; }
+  a:hover { color:#452A5C; text-decoration:underline; }
+  *, *::before, *::after { box-sizing:border-box; }
+</style>
+</helmet>
+<div style="padding:40px 32px 96px;max-width:1440px;margin:0 auto">
+
+  <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:8px">
+    <h1 style="font-family:Outfit;font-weight:600;font-size:30px;letter-spacing:-.01em;margin:0;color:#1E183F">Cores Avansat</h1>
+    <span style="font-size:14px;color:#868EA4">paleta derivada de avansat.com.br</span>
+  </div>
+  <p style="margin:0 0 40px;font-size:15px;line-height:1.6;color:#545454;max-width:70ch">O roxo da marca substitui a família <strong style="font-weight:600">Dark Blue</strong> como cor institucional. As famílias de azul, cinza-azulado e as cores de apoio seguem como estavam.</p>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+    <div style="margin-bottom:44px">
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
+        <h2 style="font-family:Outfit;font-weight:600;font-size:17px;margin:0;color:#1E183F">{{ g.title }}</h2>
+        <div style="font-size:13px;color:#868EA4">{{ g.note }}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:12px">
+        <sc-for list="{{ g.swatches }}" as="s" hint-placeholder-count="11">
+          <div>
+            <div style="height:78px;border-radius:4px;border:1px solid rgba(30,24,63,.1);margin-bottom:8px;background:{{ s.hex }}"></div>
+            <div style="font-size:12px;font-weight:700;color:#333333;line-height:1.35;margin-bottom:3px">{{ s.name }}</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:#545454;line-height:1.5">{{ s.hex }}</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:#ADADAD;line-height:1.5">{{ s.rgb }}</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:#ADADAD;line-height:1.5">{{ s.hsl }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440}}">
+class Component extends DCLogic {
+  rgbOf(hex) {
+    const h = hex.replace('#','');
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  }
+  hslOf(hex) {
+    let [r,g,b] = this.rgbOf(hex).map(v => v/255);
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+    let hh = 0;
+    if (d) {
+      if (mx === r) hh = ((g-b)/d) % 6;
+      else if (mx === g) hh = (b-r)/d + 2;
+      else hh = (r-g)/d + 4;
+      hh *= 60; if (hh < 0) hh += 360;
+    }
+    const l = (mx+mn)/2;
+    const s = d ? d/(1-Math.abs(2*l-1)) : 0;
+    return [Math.round(hh), Math.round(s*100), Math.round(l*100)];
+  }
+  sw(name, hex) {
+    const [r,g,b] = this.rgbOf(hex);
+    const [h,s,l] = this.hslOf(hex);
+    return { name, hex: hex.toUpperCase(), rgb: `rgb(${r}, ${g}, ${b})`, hsl: `hsl(${h}, ${s}, ${l})` };
+  }
+  renderVals() {
+    const g = (title, note, pairs) => ({ title, note, swatches: pairs.map(([n,h]) => this.sw(n,h)) });
+    return { groups: [
+      g('Roxo institucional', 'substitui Dark Blue — base Purple/Purple', [
+        ['Purple/Purple','#60397E'],['Purple/50','#F5F0F9'],['Purple/100','#E8DEF0'],['Purple/200','#D3C2E3'],
+        ['Purple/300','#BCA4D4'],['Purple/400','#A487C3'],['Purple/500','#8C6AB0'],['Purple/600','#75539A'],
+        ['Purple/700','#60397E'],['Purple/800','#452A5C'],['Purple/900','#2E1C3E'],['New_Purple','#1E183F']
+      ]),
+      g('Verde de ação', 'links, CTAs e confirmações', [
+        ['Green/Green','#5AD743'],['Green/50','#F1FCEE'],['Green/100','#DEF8D8'],['Green/200','#C2F2B7'],
+        ['Green/300','#A2E993'],['Green/400','#7FE268'],['Green/500','#5AD743'],['Green/600','#4ABF35'],
+        ['Green/700','#3CA32C'],['Green/800','#2C7C21'],['Green/900','#1F5B18']
+      ]),
+      g('Azul claro', 'dados, gráficos e mapas', [
+        ['Blue/Blue','#0089BF'],['Blue/50','#A5FDFF'],['Blue/100','#8DE6FF'],['Blue/200','#74BDFF'],
+        ['Blue/300','#5ABAF3'],['Blue/400','#3EA4DC'],['Blue/500','#188FC6'],['Blue/600','#007BAF'],
+        ['Blue/700','#0D679A'],['Blue/800','#005385'],['Blue/900','#004170']
+      ]),
+      g('Cinza-azulado', 'texto secundário, bordas e estados', [
+        ['Grey Blue/Grey Blue','#868EA4'],['Grey Blue/50','#EBF3FF'],['Grey Blue/100','#D4DDF4'],['Grey Blue/200','#BEC6DE'],
+        ['Grey Blue/300','#A8B0C7'],['Grey Blue/400','#939BB1'],['Grey Blue/500','#7E869C'],['Grey Blue/600','#6A7287'],
+        ['Grey Blue/700','#565E73'],['Grey Blue/800','#434B5F'],['Grey Blue/900','#31394C']
+      ]),
+      g('Preto / Branco — App', 'dark & light mode', [
+        ['icons-primary','#333333'],['icons-secondary','#C2C2C2'],['icons-tertiary','#FFFFFF'],
+        ['background-primary','#FFFFFF'],['background-secondary','#F6F6F6'],['line-primary','#EBEBEB'],
+        ['font-secondary','#545454'],['font-tertiary','#ADADAD'],['New_Ink','#1E183F']
+      ]),
+      g('Cores de apoio', 'uso pontual e funcional', [
+        ['yellow','#FFB340'],['green (legado)','#00C1B4'],['red','#FF4B6A'],
+        ['greyblue','#868EA4'],['grey','#8B8B8B'],['Randon Smart','#2E53FF']
+      ]),
+      g('Motorista PX', '', [
+        ['PX-2','#3D85C6'],['PX-1','#FE7E2F']
+      ])
+    ]};
+  }
+}
+</script>
+</body>
+</html>
