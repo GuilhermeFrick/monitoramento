@@ -84,6 +84,7 @@ import { MessagingPanel } from "./risk/views/MessagingPanel";
 import { CommandModal } from "./risk/views/CommandModal";
 import { RiskKanbanView, type AlertRisk } from "./risk/views/RiskKanbanView";
 import { TvDashboardPage } from "./risk/views/TvDashboardPage";
+import { MapaGeo, type FormaMapa } from "./risk/mapa/MapaGeo";
 
 type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "journey" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
 
@@ -148,6 +149,14 @@ const fleetRows = [
   { vehicle: "VTR-3110", type: "Caminhão 3/4", driver: "Marcos Silva", fleet: "Sudeste · Operação", status: "medium", risk: "61", speed: "34 km/h", last: "há 3 min", perfilAtivo: "Em carga" },
   { vehicle: "VTR-2240", type: "Van urbana", driver: "Não identificado", fleet: "Sul · Distribuição", status: "low", risk: "48", speed: "0 km/h", last: "há 5 min", perfilAtivo: "Pernoite" },
 ];
+
+const liveVehiclePositions: Record<string, { lat: number; lng: number }> = {
+  "VTR-2048": { lat: -22.9068, lng: -43.1729 },
+  "VTR-1783": { lat: -19.9167, lng: -43.9345 },
+  "VTR-0931": { lat: -22.864, lng: -43.775 },
+  "VTR-3110": { lat: -22.9056, lng: -47.0608 },
+  "VTR-2240": { lat: -22.743, lng: -43.704 },
+};
 
 const eventFeed = [
   { color: "red", icon: Siren, title: "Fadiga detectada", desc: "VTR-2048 · Carlos Mendes · condição em curso", time: "14:32", natureza: "condicao" },
@@ -281,9 +290,24 @@ function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca,
   const [cameraCount, setCameraCount] = useState(4);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>(["VTR-2048", "VTR-1783"]);
   const [monitorMode, setMonitorMode] = useState<"single" | "mosaic">("single");
+  const [mapRevision, setMapRevision] = useState(0);
+  const [showMapLayers, setShowMapLayers] = useState(true);
   const selectedVehicle = veiculo.atual || configs[0]?.veiculo || fleetRows[0].vehicle;
   const selected = fleetRows.find((row) => row.vehicle === selectedVehicle) ?? fleetRows[0];
   const selectVehicle = (vehicle: string) => { veiculo.selecionar(vehicle); onToast(`${vehicle} selecionado · câmeras e telemetria atualizadas.`); };
+  const liveMapShapes: FormaMapa[] = [
+    ...(showMapLayers ? [
+      { id: "operational-itaguai", geometria: { tipo: "circulo" as const, centro: { lat: -22.864, lng: -43.775 }, raioM: 11000 }, estilo: "contexto" as const, rotulo: "Área operacional · Itaguaí" },
+      { id: "operational-campinas", geometria: { tipo: "circulo" as const, centro: { lat: -22.9056, lng: -47.0608 }, raioM: 9000 }, estilo: "contexto" as const, rotulo: "Base Campinas" },
+    ] : []),
+    ...fleetRows.map((row): FormaMapa => ({
+      id: `live-${row.vehicle}`,
+      geometria: { tipo: "circulo", centro: liveVehiclePositions[row.vehicle], raioM: selectedVehicle === row.vehicle ? 5200 : 3400 },
+      estilo: selectedVehicle === row.vehicle ? "veiculo-selecionado" : row.status === "high" ? "veiculo-risco" : row.status === "medium" ? "veiculo-atencao" : "veiculo",
+      rotulo: `${row.vehicle} · ${row.driver} · ${row.speed}`,
+      aoClicar: () => selectVehicle(row.vehicle),
+    })),
+  ];
   const toggleMosaicVehicle = (vehicle: string) => setSelectedVehicles((current) => current.includes(vehicle) ? current.filter((item) => item !== vehicle) : [...current, vehicle]);
   const mosaicVehicles = fleetRows.filter((row) => selectedVehicles.includes(row.vehicle));
   const openMosaicWindow = () => { try { window.localStorage.setItem("avansat-risk:mosaic-selection", JSON.stringify(selectedVehicles)); } catch { /* localStorage opcional */ } const popup = window.open(`${window.location.origin}${window.location.pathname}?display=mosaic`, "avansat-monitoring-wall", "popup=yes,width=1440,height=900"); if (popup) { popup.focus(); onToast("Parede de monitoramento aberta em uma nova janela."); } else onToast("O navegador bloqueou a janela. Permita pop-ups para usar uma tela externa."); };
@@ -321,7 +345,7 @@ function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca,
         </header>
 
         {monitorMode === "mosaic" ? <div className="monitor-mosaic-pane"><div className="mosaic-inline-wrap"><MosaicDisplay vehicles={mosaicVehicles} /><div className="mosaic-inline-actions"><span><CheckCircle2 size={13} /> {selectedVehicles.length} veículos selecionados</span><button className="soft-btn" onClick={openMosaicWindow}><ArrowUpRight size={13} /> Enviar para TV / monitor</button></div></div></div> : <div className="monitor-workspace monitor-workspace-compact">
-          <section className="monitor-map panel"><div className="monitor-section-head"><div><div className="panel-title">Mapa operacional</div><div className="panel-subtitle">Posição, direção, risco, cercas e pontos de controle da seleção</div></div><div className="map-quick-actions"><button className="icon-btn" onClick={() => onToast("Mapa centralizado na seleção.")}><Target size={14} /></button><button className="icon-btn" onClick={() => onToast("Camadas de cercas e pontos de controle alternadas.")}><Globe2 size={14} /></button></div></div><div className="live-map-stage"><div className="map-river" /><div className="map-road a" /><div className="map-road b" /><div className="map-road c" /><div className="map-road d" /><span className="map-label one">Contagem</span><span className="map-label two">Rio de Janeiro</span><span className="map-label three">Itaguaí</span><span className="map-label four">Seropédica</span>{fleetRows.map((row, i) => <button key={row.vehicle} className={`map-pin ${row.status === "medium" ? "amber" : row.status === "low" ? "teal" : ""} live-pin-${i} ${selectedVehicle === row.vehicle ? "selected-pin" : ""}`} onClick={() => selectVehicle(row.vehicle)}><MapPin size={11} /></button>)}<div className="map-controls"><button className="map-control">+</button><button className="map-control">−</button><button className="map-control"><Target size={13} /></button></div><div className="map-legend"><span><i /> alto risco</span><span><i className="amber" /> atenção</span><span><i className="teal" /> conectado</span></div></div><div className="vehicle-strip"><div className="vehicle-strip-main"><div className="vehicle-avatar"><Truck size={15} /></div><div><strong>{selected.vehicle}</strong><small>{selected.driver} · {selected.speed} · {selected.last} · perfil {selected.perfilAtivo}</small></div></div><span className={`status ${selected.status}`}>{selected.status === "high" ? "Alto risco" : selected.status === "medium" ? "Atenção" : "Monitorado"}</span><button className="panel-link" onClick={() => onSelectRisk(initialRisks.find((risk) => risk.vehicle === selected.vehicle) ?? initialRisks[0])}>Abrir ocorrência <ChevronRight size={12} /></button></div></section>
+          <section className="monitor-map panel"><div className="monitor-section-head"><div><div className="panel-title">Mapa operacional</div><div className="panel-subtitle">Posição real, risco e áreas operacionais da seleção</div></div><div className="map-quick-actions"><button className="icon-btn" title="Reenquadrar frota" aria-label="Reenquadrar frota no mapa" onClick={() => { setMapRevision((value) => value + 1); onToast("Frota reenquadrada no mapa."); }}><Target size={14} /></button><button className={`icon-btn ${showMapLayers ? "active" : ""}`} title="Alternar áreas operacionais" aria-label="Alternar áreas operacionais" aria-pressed={showMapLayers} onClick={() => { setShowMapLayers((value) => !value); onToast(showMapLayers ? "Áreas operacionais ocultadas." : "Áreas operacionais exibidas."); }}><Globe2 size={14} /></button></div></div><div className="monitor-geo-stage"><MapaGeo formas={liveMapShapes} ajuste={`monitor-${selectedVehicle}-${mapRevision}`} rotulo="Mapa de monitoramento ao vivo da frota" /><div className="monitor-map-legend"><span><i className="risk" /> alto risco</span><span><i className="attention" /> atenção</span><span><i className="online" /> conectado</span><span><i className="selected" /> selecionado</span></div></div><div className="vehicle-strip"><div className="vehicle-strip-main"><div className="vehicle-avatar"><Truck size={15} /></div><div><strong>{selected.vehicle}</strong><small>{selected.driver} · {selected.speed} · {selected.last} · perfil {selected.perfilAtivo}</small></div></div><span className={`status ${selected.status}`}>{selected.status === "high" ? "Alto risco" : selected.status === "medium" ? "Atenção" : "Monitorado"}</span><button className="panel-link" onClick={() => onSelectRisk(initialRisks.find((risk) => risk.vehicle === selected.vehicle) ?? initialRisks[0])}>Abrir ocorrência <ChevronRight size={12} /></button></div></section>
           <aside className="camera-wall panel"><div className="camera-wall-head"><div><div className="panel-title">Câmeras do veículo</div><div className="panel-subtitle">{selectedVehicle} · MDVR-0882</div></div><span className="status online">Online</span></div><div className="camera-tabs"><button className="active">Ao vivo</button><button>Playback</button><button>Alarmes <span>3</span></button></div><div className={`camera-grid camera-count-${cameraCount}`}>{Array.from({ length: cameraCount }).map((_, index) => <button className="camera-tile" key={index} onClick={() => onToast(`Câmera ${index + 1} aberta em foco.`)}><div className="camera-art"><span className="camera-scanline" /><PlayCircle size={22} /></div><div className="camera-tile-footer"><span>CAM {String(index + 1).padStart(2, "0")}</span><small>{index === 0 ? "Frontal" : index === 1 ? "Cabine" : index === 2 ? "Traseira" : "Lateral"}</small></div></button>)}</div><div className="camera-controls"><button className="camera-control active" onClick={() => onToast("Áudio do veículo ativado.")}><Headphones size={14} /><span>Áudio</span></button><button className="camera-control" onClick={() => onToast("Intercomunicador pronto para iniciar.")}><Radio size={14} /><span>Intercom</span></button><button className="camera-control" onClick={() => onToast("Captura salva em evidências.")}><Archive size={14} /><span>Capturar</span></button><button className="camera-control danger" onClick={() => onCommand(selectedVehicle)}><ShieldAlert size={14} /><span>Comandos</span></button></div><div className="camera-wall-footer"><span>Grade de câmeras</span><div className="segmented"><button className={cameraCount === 1 ? "active" : ""} onClick={() => setCameraCount(1)}>1</button><button className={cameraCount === 4 ? "active" : ""} onClick={() => setCameraCount(4)}>4</button></div><button className="icon-btn" onClick={() => onToast("Parede de câmeras maximizada.")}><ArrowUpRight size={14} /></button></div></aside>
         </div>}
 

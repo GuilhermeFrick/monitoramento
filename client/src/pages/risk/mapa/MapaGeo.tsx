@@ -26,7 +26,8 @@ export type EstiloForma =
   | "ponto" | "ponto-inativo" | "ponto-fixo" | "selecionado"
   | "cerca" | "cerca-inativa" | "cerca-vencida"
   | "rota" | "rota-inativa" | "sobreposicao" | "contexto"
-  | "trecho" | "trecho-feito" | "trecho-atual";
+  | "trecho" | "trecho-feito" | "trecho-atual"
+  | "veiculo" | "veiculo-atencao" | "veiculo-risco" | "veiculo-selecionado";
 
 export type FormaMapa = {
   id: string;
@@ -83,6 +84,10 @@ const ESTILOS: Record<EstiloForma, LeafletNS.PathOptions> = {
   trecho: { color: "#8fa0ae", weight: 2, dashArray: "7 5" },
   "trecho-feito": { color: "#0f7c75", weight: 2.5 },
   "trecho-atual": { color: "#4f66a8", weight: 4 },
+  veiculo: { color: "#3fbd9a", weight: 2, fillColor: "#3fbd9a", fillOpacity: 0.86 },
+  "veiculo-atencao": { color: "#f0b84d", weight: 2, fillColor: "#f0b84d", fillOpacity: 0.88 },
+  "veiculo-risco": { color: "#ef646d", weight: 2.5, fillColor: "#ef646d", fillOpacity: 0.9 },
+  "veiculo-selecionado": { color: "#ffffff", weight: 3, fillColor: "#1688f7", fillOpacity: 0.95 },
 };
 
 /**
