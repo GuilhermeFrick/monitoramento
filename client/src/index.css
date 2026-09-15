@@ -12,37 +12,38 @@
      (#8a97a4, #7b8a99 e #7b8896 eram o mesmo cinza escrito três vezes), e sem
      nome não há como trocar de tema.
      --------------------------------------------------------------------- */
-  --n-1: #FAF7FC;   /* superfície de painel */
-  --n-2: #F4EFF8;   /* preenchimento sutil, hover */
-  --n-3: #EFEAF4;   /* página, afundado */
-  --n-4: #E3DDEB;   /* borda clara */
-  --n-5: #CEC6DC;   /* borda forte */
-  --n-6: #71658B;   /* texto terciário */
-  --n-7: #6C6481;   /* texto secundário */
-  --n-8: #443D55;   /* texto forte */
-  --n-9: #262033;   /* texto primário */
+  --n-1: #FBFBFB;   /* superfície de painel */
+  --n-2: #F3F3F3;   /* preenchimento sutil, hover */
+  --n-3: #EDEDED;   /* página, afundado */
+  --n-4: #E0E0E0;   /* borda clara */
+  --n-5: #C6C6C6;   /* borda forte */
+  --n-6: #6B6B6B;   /* texto terciário */
+  --n-7: #545454;   /* texto secundário */
+  --n-8: #3B3B3B;   /* texto forte */
+  --n-9: #1F1F1F;   /* texto primário */
 
   /* Estados. O matiz é o significado e não muda entre os temas; o que muda é
      a luminosidade, que inverte junto com o fundo. */
-  --danger-fg: #C43C3E;  --danger-bg: #FDECEB;  --danger-border: #F2CFCE;
-  --warn-fg:   #96631A;  --warn-bg:   #FDF4E4;  --warn-border:   #EDDCBC;
-  --ok-fg:     #1F7A6C;  --ok-bg:     #E7F5F1;  --ok-border:     #BFE0D7;
-  --brand-fg:  #60397E;  --brand-bg:  #F5F0F9;  --brand-border:  #D3C2E3;
+  --danger-fg: #C4271C;  --danger-bg: #FDEDEC;  --danger-border: #F3CFCC;
+  --warn-fg:   #8A6100;  --warn-bg:   #FDF6E3;  --warn-border:   #EEDFB4;
+  --ok-fg:     #2C6E1F;  --ok-bg:     #EDF6EA;  --ok-border:     #C8E2BE;
+  --brand-fg:  #005FB8;  --brand-bg:  #E8F1FB;  --brand-border:  #B8D4F0;
 
   /* Preenchimento colorido com texto branco por cima. Escurece de leve no tema
      escuro em vez de clarear, para o branco continuar legível. */
-  --brand-fill:  #60397E;
-  --danger-fill: #B8383A;
-  --warn-fill:   #8A5A18;
-  --ok-fill:     #1B6B5F;
-  --topbar-bg:   rgba(250, 247, 252, .92);
-  --flutuante:   rgba(250, 247, 252, .94);
+  --brand-fill:  #005FB8;
+  --danger-fill: #B02A20;
+  --warn-fill:   #7E5800;
+  --ok-fill:     #2C6E1F;
+  --on-fill-muted: #D8E6F4;
+  --topbar-bg:   rgba(251, 251, 251, .92);
+  --flutuante:   rgba(251, 251, 251, .94);
 
   /* Marca. O roxo institucional da Avansat no lugar do Dark Blue. */
-  --ink: #1E183F;
-  --brand: #60397E;
-  --brand-strong: #452A5C;
-  --brand-action: #8C6AB0;
+  --ink: #1F1F1F;
+  --brand: #005FB8;
+  --brand-strong: #004A92;
+  --brand-action: #0078D4;
   --brand-soft: var(--brand-bg);
   --brand-muted: var(--brand-border);
   --on-brand: #FFFFFF;
@@ -81,31 +82,32 @@
    modo claro, invertida.
    --------------------------------------------------------------------------- */
 :root.dark {
-  --n-1: #241E38;
-  --n-2: #2C2543;
-  --n-3: #1A1528;
-  --n-4: #383049;
-  --n-5: #4A4160;
-  --n-6: #9791A8;
-  --n-7: #A9A1BE;
-  --n-8: #CFC8DE;
-  --n-9: #EDE9F4;
+  --n-1: #1F1F1F;
+  --n-2: #2B2B2B;
+  --n-3: #141414;
+  --n-4: #313131;
+  --n-5: #454545;
+  --n-6: #9D9D9D;
+  --n-7: #BBBBBB;
+  --n-8: #D4D4D4;
+  --n-9: #E8E8E8;
 
-  --danger-fg: #F58C8C;  --danger-bg: #3A2128;  --danger-border: #5B323A;
-  --warn-fg:   #E8B45F;  --warn-bg:   #362A18;  --warn-border:   #55421F;
-  --ok-fg:     #5FC9B4;  --ok-bg:     #16322E;  --ok-border:     #24504A;
-  --brand-fg:  #C3A6DC;  --brand-bg:  #2E2344;  --brand-border:  #4A3A66;
-  --brand-fill:  #7B4FA0;
-  --danger-fill: #C04044;
-  --warn-fill:   #94621C;
-  --ok-fill:     #1F7A6C;
-  --topbar-bg:   rgba(26, 21, 40, .92);
-  --flutuante:   rgba(36, 30, 56, .94);
+  --danger-fg: #F36262;  --danger-bg: #3A1D1C;  --danger-border: #5C2B29;
+  --warn-fg:   #D8AF2C;  --warn-bg:   #332B12;  --warn-border:   #54471C;
+  --ok-fg:     #89D185;  --ok-bg:     #1B2C18;  --ok-border:     #2F4A2B;
+  --brand-fg:  #4DAAFF;  --brand-bg:  #12263A;  --brand-border:  #1F4A6B;
+  --brand-fill:  #0068B8;
+  --danger-fill: #BE312B;
+  --warn-fill:   #875F00;
+  --ok-fill:     #37732A;
+  --on-fill-muted: #D8E6F4;
+  --topbar-bg:   rgba(20, 20, 20, .92);
+  --flutuante:   rgba(31, 31, 31, .94);
 
-  --ink: #15112A;
-  --brand: #7B4FA0;
-  --brand-strong: #60397E;
-  --brand-action: #A487C3;
+  --ink: #181818;
+  --brand: #0078D4;
+  --brand-strong: #005FB8;
+  --brand-action: #3794FF;
 
   /* O mapa é base clara do OpenStreetMap: no escuro ele é invertido e
      re-rotacionado no matiz, senão vira um negativo azulado. */
@@ -311,12 +313,12 @@ tbody tr:hover { background: var(--n-1); }
 .risk-score-label { display: block; font-size: 9px; color: var(--n-6); }
 .detail-panel { padding: 19px; }
 .detail-hero { background: var(--brand-fill); color: #fff; margin: -19px -19px 18px; padding: 19px; border-radius: 12px 12px 0 0; }
-.detail-kicker { color: var(--brand-border); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; font-weight: 800; }
+.detail-kicker { color: var(--on-fill-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; font-weight: 800; }
 .detail-title { font-size: 18px; margin-top: 8px; letter-spacing: -.035em; }
-.detail-sub { color: var(--brand-border); font-size: 10px; margin-top: 5px; }
+.detail-sub { color: var(--on-fill-muted); font-size: 10px; margin-top: 5px; }
 .detail-score { display: flex; align-items: end; justify-content: space-between; margin-top: 18px; }
 .detail-score strong { font-size: 35px; letter-spacing: -.08em; }
-.detail-score span { color: var(--brand-border); font-size: 10px; padding-bottom: 6px; }
+.detail-score span { color: var(--on-fill-muted); font-size: 10px; padding-bottom: 6px; }
 .detail-section { padding: 13px 0; border-bottom: 1px solid var(--n-2); }
 .detail-section:last-child { border-bottom: 0; }
 .detail-label { color: var(--n-6); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; margin-bottom: 7px; }
@@ -1384,7 +1386,7 @@ tr.linha-selecionada { background: var(--n-2); box-shadow: inset 3px 0 0 var(--o
 .roteiro-mapa-instrucao span { flex: 1; }
 .roteiro-mapa-instrucao button { border: 0; background: transparent; color: #fff; cursor: pointer; }
 .escolhendo-posicao { cursor: crosshair !important; }
-.roteiro-pin { border: 3px solid #fff; border-radius: 50%; box-shadow: 0 2px 8px #60397E44; background: var(--brand-fill); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+.roteiro-pin { border: 3px solid #fff; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.28); background: var(--brand-fill); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
 .roteiro-pin.destino { background: var(--brand-fill); }
 .roteiro-pin.parada { background: var(--n-2); color: var(--brand-fg); }
 .roteiro-pin.passagem { background: var(--surface); color: var(--brand-fg); border: 2px dashed var(--brand-fg); }
