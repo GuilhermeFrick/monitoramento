@@ -354,7 +354,7 @@ export function MacroGraphCanvas({ config, selecao, validacoes, contextActions, 
             onPointerCancel={soltarPonteiro}
           >
             <defs>
-              <marker id="wsp-seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9fb2c2" /></marker>
+              <marker id="wsp-seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--graph-edge)" /></marker>
               <marker id="wsp-seta-ativa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--brand-action)" /></marker>
               <marker id="wsp-seta-sel" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c8102e" /></marker>
             </defs>

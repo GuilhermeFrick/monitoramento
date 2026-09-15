@@ -44,7 +44,7 @@ export function useStoredState<T>(key: string, initial: T): [T, (next: T | ((cur
 }
 
 export function PageHeader({ eyebrow, title, description, action, actionIcon: ActionIcon = Plus, onAction }: { eyebrow: string; title: string; description: string; action?: string; actionIcon?: IconType; onAction?: () => void }) {
-  return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p className="page-desc">{description}</p></div>{action ? <button className="primary-btn" onClick={onAction}><ActionIcon size={14} />{action}</button> : <div className="date-chip"><CalendarDays size={14} /> 08 set 2026 <ChevronDown size={13} /></div>}</div>;
+  return <div className="page-heading" aria-label={`${eyebrow}: ${title}`}><h1 className="visually-hidden">{title}</h1><p className="page-desc">{description}</p>{action ? <button className="primary-btn" onClick={onAction}><ActionIcon size={14} />{action}</button> : <div className="date-chip"><CalendarDays size={14} /> 08 set 2026 <ChevronDown size={13} /></div>}</div>;
 }
 
 export function KpiCard({ label, value, meta, icon: Icon, tone = "teal", trend }: { label: string; value: string; meta: string; icon: IconType; tone?: string; trend?: "up" | "down" }) {

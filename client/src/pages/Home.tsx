@@ -78,26 +78,13 @@ import { SecurityView } from "./risk/views/SecurityView";
 import { EventsView } from "./risk/views/EventsView";
 import { MessagingPanel } from "./risk/views/MessagingPanel";
 import { CommandModal } from "./risk/views/CommandModal";
+import { RiskKanbanView, type AlertRisk } from "./risk/views/RiskKanbanView";
 
 type ViewKey = "dashboard" | "realtime" | "risks" | "events" | "evidence" | "reports" | "fences" | "controlpoints" | "routes" | "profiles" | "equipment" | "provisioning" | "security" | "traffic" | "drivers" | "training" | "fleet" | "settings";
 
-type Risk = {
-  id: string;
-  title: string;
-  vehicle: string;
-  driver: string;
-  zone: string;
-  time: string;
-  score: number;
-  severity: "high" | "medium" | "low";
-  detail: string;
-  status: string;
-  perfilAtivo: string;
-  pontoDeControle: string | null;
-  natureza: "condicao" | "marco";
-};
+type Risk = AlertRisk;
 
-const RISK_STORAGE_KEY = "avansat-risk:v2:risks";
+const RISK_STORAGE_KEY = "avansat-risk:v4:risks";
 const AUDIT_STORAGE_KEY = "avansat-risk:v2:audit";
 
 function loadRisks(): Risk[] {
@@ -113,7 +100,7 @@ const navGroups: { label: string; items: { id: ViewKey; label: string; icon: Ico
   { label: "Operação", items: [
     { id: "dashboard", label: "Visão geral", icon: LayoutDashboard },
     { id: "realtime", label: "Monitoramento ao vivo", icon: Radar },
-    { id: "risks", label: "Riscos em tempo real", icon: ShieldAlert, count: 12 },
+    { id: "risks", label: "Gestão de alertas e riscos", icon: ShieldAlert, count: 8 },
     { id: "events", label: "Eventos", icon: ListChecks },
   ] },
   { label: "Inteligência", items: [
@@ -138,11 +125,14 @@ const navGroups: { label: string; items: { id: ViewKey; label: string; icon: Ico
 ];
 
 const initialRisks: Risk[] = [
-  { id: "AR-2048", title: "Fadiga detectada", vehicle: "VTR-2048", driver: "Carlos Mendes", zone: "BR-116 · km 420", time: "há 4 min", score: 92, severity: "high", detail: "Padrão de olhos fechados acima do limiar por 8 segundos. Contato por intercom e parada em posto homologado recomendados.", status: "Em tratamento", perfilAtivo: "Viagem normal", pontoDeControle: null, natureza: "condicao" },
-  { id: "AR-1783", title: "Velocidade acima do limite do trecho", vehicle: "VTR-1783", driver: "Ana Paula Costa", zone: "Anel Rodoviário · faixa 2", time: "há 11 min", score: 84, severity: "high", detail: "Veículo a 96 km/h em trecho do rotograma limitado a 80 km/h. Evento reincidente nesta rota.", status: "Aguardando ação", perfilAtivo: "Viagem normal", pontoDeControle: null, natureza: "condicao" },
-  { id: "AR-0931", title: "Celular em uso", vehicle: "VTR-0931", driver: "Rafael Nunes", zone: "Av. Brasil · acesso norte", time: "há 18 min", score: 76, severity: "medium", detail: "Distração visual identificada por 3.4 segundos. Evidência de vídeo pronta para revisão.", status: "Aguardando ação", perfilAtivo: "No cliente", pontoDeControle: "CD Itaguaí · doca 4", natureza: "marco" },
-  { id: "AR-3110", title: "Entrada em cerca restrita", vehicle: "VTR-3110", driver: "Marcos Silva", zone: "Pátio Itaguaí", time: "há 25 min", score: 61, severity: "medium", detail: "Entrada não prevista na cerca “Área restrita · Pátio Itaguaí” fora da janela autorizada.", status: "Em tratamento", perfilAtivo: "Em carga", pontoDeControle: "Base Campinas · carregamento", natureza: "marco" },
-  { id: "AR-2240", title: "Falha de identificação", vehicle: "VTR-2240", driver: "Não identificado", zone: "Base Campinas", time: "há 32 min", score: 48, severity: "low", detail: "Credencial não validada no início do turno. Validação manual solicitada.", status: "Resolvido", perfilAtivo: "Pernoite", pontoDeControle: "Pátio pernoite Seropédica", natureza: "marco" },
+  { id: "AR-2048", title: "Fadiga detectada", vehicle: "VTR-2048", driver: "Carlos Mendes", zone: "BR-116 · km 420", time: "há 4 min", score: 92, severity: "high", detail: "Padrão de olhos fechados acima do limiar por 8 segundos. Contato por intercom e parada em posto homologado recomendados.", status: "Em tratamento", perfilAtivo: "Viagem normal", pontoDeControle: null, natureza: "condicao", categoriaRisco: "safety" },
+  { id: "AR-1783", title: "Velocidade acima do limite do trecho", vehicle: "VTR-1783", driver: "Ana Paula Costa", zone: "Anel Rodoviário · faixa 2", time: "há 11 min", score: 84, severity: "high", detail: "Veículo a 96 km/h em trecho do rotograma limitado a 80 km/h. Evento reincidente nesta rota.", status: "Novo", perfilAtivo: "Viagem normal", pontoDeControle: null, natureza: "condicao", categoriaRisco: "safety" },
+  { id: "AR-0931", title: "Celular em uso", vehicle: "VTR-0931", driver: "Rafael Nunes", zone: "Av. Brasil · acesso norte", time: "há 18 min", score: 76, severity: "medium", detail: "Distração visual identificada por 3.4 segundos. Evidência de vídeo pronta para revisão.", status: "Novo", perfilAtivo: "No cliente", pontoDeControle: "CD Itaguaí · doca 4", natureza: "marco", categoriaRisco: "safety" },
+  { id: "AR-3110", title: "Entrada em cerca restrita", vehicle: "VTR-3110", driver: "Marcos Silva", zone: "Pátio Itaguaí", time: "há 25 min", score: 61, severity: "medium", detail: "Entrada não prevista na cerca “Área restrita · Pátio Itaguaí” fora da janela autorizada.", status: "Em tratamento", perfilAtivo: "Em carga", pontoDeControle: "Base Campinas · carregamento", natureza: "marco", categoriaRisco: "security" },
+  { id: "AR-2240", title: "Falha de identificação", vehicle: "VTR-2240", driver: "Não identificado", zone: "Base Campinas", time: "há 32 min", score: 48, severity: "low", detail: "Credencial não validada no início do turno. Validação manual solicitada.", status: "Resolvido", perfilAtivo: "Pernoite", pontoDeControle: "Pátio pernoite Seropédica", natureza: "marco", categoriaRisco: "security" },
+  { id: "AR-5221", title: "Botão de pânico acionado", vehicle: "VTR-5221", driver: "Fernanda Lima", zone: "BR-040 · km 81", time: "há 7 min", score: 98, severity: "high", detail: "Acionamento manual recebido pela central. Comunicação com a cabine ainda não confirmada.", status: "Aguardando ação", perfilAtivo: "Em viagem", pontoDeControle: null, natureza: "condicao", categoriaRisco: "security" },
+  { id: "AR-4407", title: "Desvio do rotograma", vehicle: "VTR-4407", driver: "João Batista", zone: "Rod. Anhanguera · saída 47", time: "há 14 min", score: 72, severity: "medium", detail: "Veículo saiu do corredor autorizado por 2,4 km e permanece fora da rota planejada.", status: "Em tratamento", perfilAtivo: "Em viagem", pontoDeControle: null, natureza: "condicao", categoriaRisco: "security" },
+  { id: "AR-3650", title: "Câmera frontal obstruída", vehicle: "VTR-3650", driver: "Juliana Alves", zone: "Base Campinas", time: "há 21 min", score: 55, severity: "low", detail: "Qualidade da imagem abaixo do mínimo por mais de 30 segundos. Inspeção solicitada.", status: "Aguardando ação", perfilAtivo: "Em carga", pontoDeControle: "Base Campinas · portaria", natureza: "condicao", categoriaRisco: "safety" },
 ];
 
 const fleetRows = [
@@ -160,7 +150,7 @@ const eventFeed = [
   { color: "red", icon: Globe2, title: "Entrada em cerca restrita", desc: "VTR-0931 · Pátio Itaguaí · marco", time: "14:15", natureza: "marco" },
 ];
 
-function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen }: { active: ViewKey; onSelect: (view: ViewKey) => void; collapsed: boolean; onToggle: () => void; mobileOpen: boolean }) {
+function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen, riskCount }: { active: ViewKey; onSelect: (view: ViewKey) => void; collapsed: boolean; onToggle: () => void; mobileOpen: boolean; riskCount: number }) {
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "sidebar-open" : ""}`}>
       <div className="brand">
@@ -171,9 +161,12 @@ function Sidebar({ active, onSelect, collapsed, onToggle, mobileOpen }: { active
       <div className="sidebar-section">
         {navGroups.map((group) => <div key={group.label}>
           <div className="sidebar-label">{group.label}</div>
-          {group.items.map(({ id, label, icon: Icon, count }) => <button key={id} title={collapsed ? label : undefined} aria-label={collapsed ? label : undefined} className={`nav-btn ${active === id ? "active" : ""}`} onClick={() => onSelect(id)}>
-            <Icon size={16} strokeWidth={1.8} /><span>{label}</span>{count ? <span className="nav-count">{count}</span> : null}
-          </button>)}
+          {group.items.map(({ id, label, icon: Icon, count }) => {
+            const badge = id === "risks" ? riskCount : count;
+            return <button key={id} title={collapsed ? label : undefined} aria-label={collapsed ? label : undefined} className={`nav-btn ${active === id ? "active" : ""}`} onClick={() => onSelect(id)}>
+              <Icon size={16} strokeWidth={1.8} /><span>{label}</span>{badge ? <span className="nav-count">{badge}</span> : null}
+            </button>;
+          })}
         </div>)}
         <div className="sidebar-label">Sistema</div>
         <button title={collapsed ? "Configurações" : undefined} aria-label={collapsed ? "Configurações" : undefined} className={`nav-btn ${active === "settings" ? "active" : ""}`} onClick={() => onSelect("settings")}><Settings size={16} strokeWidth={1.8} /><span>Configurações</span></button>
@@ -237,19 +230,17 @@ function FleetTable({ search, onSelectRisk }: { search: string; onSelectRisk: (r
 
 function Dashboard({ search, onSelectRisk, onToast, onNavigate }: { search: string; onSelectRisk: (risk: Risk) => void; onToast: (message: string) => void; onNavigate: (view: ViewKey) => void }) {
   return <>
-    <PageHeader eyebrow="Cockpit operacional" title="Bom dia, User Teste" description="Aqui está o pulso de segurança da sua operação neste momento." />
+    <div className="dashboard-context" aria-label="Contexto dos indicadores">
+      <h1 className="visually-hidden">Visão geral</h1>
+      <span className="dashboard-live"><i /> Operação atualizada <small>há 18s</small></span>
+      <time dateTime="2026-09-08"><CalendarDays size={13} /> 08 set 2026</time>
+    </div>
     <div className="kpi-grid"><KpiCard label="Score de segurança" value="78 / 100" meta="4,2% vs. semana anterior" icon={CircleGauge} trend="up" /><KpiCard label="Riscos ativos" value="12" meta="3 críticos aguardando ação" icon={ShieldAlert} tone="red" trend="down" /><KpiCard label="Veículos conectados" value="184 / 192" meta="95,8% da frota online" icon={Radio} trend="up" /><KpiCard label="Tempo médio de resposta" value="04:38" meta="18% mais rápido" icon={Clock3} trend="up" /></div>
     <div className="grid-2-1"><div className="panel animate-rise animate-delay-1"><div className="panel-header"><div><div className="panel-title">Tendência de risco operacional</div><div className="panel-subtitle">Score consolidado da frota · últimos 6 dias</div></div><div className="chart-legend"><span className="legend-item"><i className="legend-dot" /> Score atual</span><span className="legend-item"><i className="legend-dot alt" /> Meta 80</span></div></div><RiskChart /></div><div className="panel animate-rise animate-delay-2"><div className="panel-header"><div><div className="panel-title">Saúde da operação</div><div className="panel-subtitle">Distribuição por criticidade</div></div><button className="panel-link" onClick={() => onSelectRisk(initialRisks[0])}>Detalhar</button></div><div className="risk-summary"><div className="score-ring"><div>78</div></div><div><div className="score-label">Score geral</div><div className="score-title">Operação controlada</div><div className="score-context">+4,2% de evolução no período</div></div></div><div className="risk-bars"><div className="risk-row"><span>Baixo risco</span><strong>142</strong><div className="bar"><span style={{ width: "76%" }} /></div></div><div className="risk-row"><span>Risco moderado</span><strong>31</strong><div className="bar warn"><span style={{ width: "28%" }} /></div></div><div className="risk-row"><span>Alto risco</span><strong>11</strong><div className="bar danger"><span style={{ width: "11%" }} /></div></div></div></div></div>
     <div className="grid-2-1"><MapPanel onSelectRisk={onSelectRisk} /><FeedPanel onSelectRisk={onSelectRisk} onViewAll={() => onNavigate("events")} /></div>
     <FleetTable search={search} onSelectRisk={onSelectRisk} />
     <div className="panel" style={{ marginTop: 18, background: "var(--brand-fill)", color: "#fff", borderColor: "var(--brand-fill)" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}><div style={{ display: "flex", alignItems: "center", gap: 13 }}><div style={{ width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(88,128,251,.22)", color: "#ffffff" }}><HardDriveUpload size={17} /></div><div><div style={{ fontSize: 12, fontWeight: 800 }}>Embarque EMB-3041 aguardando aceite</div><div style={{ color: "var(--on-fill-muted)", fontSize: 10, marginTop: 4 }}>VTR-2048 · 4 itens aceitos · 1 rejeitado (ponto inativo) · 1 credencial pendente</div></div></div><button className="soft-btn" onClick={() => { onToast("Abrindo provisionamento."); onNavigate("provisioning"); }}>Ver provisionamento <ChevronRight size={13} /></button></div></div>
   </>;
-}
-
-function RisksView({ risks, search, onSelectRisk, onCommand }: { risks: Risk[]; search: string; onSelectRisk: (risk: Risk) => void; onCommand: (vehicle: string) => void }) {
-  const [severity, setSeverity] = useState("all");
-  const filtered = risks.filter((risk) => (severity === "all" || risk.severity === severity) && `${risk.title} ${risk.vehicle} ${risk.driver}`.toLowerCase().includes(search.toLowerCase()));
-  return <><PageHeader eyebrow="Orquestração de risco" title="Riscos em tempo real" description="Priorize eventos ativos, delegue ou envie comandos ao veículo e acompanhe a eficácia de cada resposta." action="Comandos ao veículo" actionIcon={Terminal} onAction={() => onCommand(filtered[0]?.vehicle ?? initialRisks[0].vehicle)} /><div className="risk-page-grid"><div className="panel" style={{ padding: 0 }}><div className="toolbar"><div className="filters"><button className="secondary-btn"><Filter size={13} /> Filtros</button><select className="filter-select" value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="all">Todas as criticidades</option><option value="high">Alta criticidade</option><option value="medium">Média criticidade</option><option value="low">Baixa criticidade</option></select><select className="filter-select"><option>Todos os status</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select></div><span style={{ fontSize: 10, color: "var(--n-6)" }}>{filtered.length} eventos encontrados</span></div><div className="risk-list">{filtered.map((risk) => <button className="risk-list-item" key={risk.id} onClick={() => onSelectRisk(risk)}><span className={`risk-severity ${risk.severity === "medium" ? "amber" : risk.severity === "low" ? "teal" : ""}`} /><span><span className="risk-list-title">{risk.title}</span><span className="risk-list-desc">{risk.detail}</span><span className="risk-list-meta"><span>{risk.vehicle}</span><span>{risk.driver}</span><span>{risk.time}</span></span></span><span className="risk-score"><span className="risk-score-num">{risk.score}</span><span className="risk-score-label">score</span></span></button>)}{filtered.length === 0 ? <div className="empty-note"><div className="empty-icon"><ShieldCheck size={18} /></div>Nenhum risco corresponde aos filtros.</div> : null}</div></div><div className="panel page-panel"><div className="panel-header"><div><div className="panel-title">Eficiência dos comandos</div><div className="panel-subtitle">Últimos 30 dias</div></div><button className="panel-link" onClick={() => undefined}>Relatório</button></div><div className="report-cards"><div className="report-card"><div className="label">Resolvidos no SLA</div><div className="num">94%</div><div className="sub">+6,8% no período</div></div><div className="report-card"><div className="label">Reincidência</div><div className="num">8,2%</div><div className="sub" style={{ color: "#d1635c" }}>−2,1% no período</div></div><div className="report-card"><div className="label">Botões acionados pelo motorista</div><div className="num">218</div><div className="sub">de 231 habilitados</div></div></div><div className="detail-section"><div className="detail-label">Resposta por categoria</div><div className="risk-bars"><div className="risk-row"><span>Comportamento</span><strong>96%</strong><div className="bar"><span style={{ width: "96%" }} /></div></div><div className="risk-row"><span>Dinâmica veicular</span><strong>91%</strong><div className="bar"><span style={{ width: "91%" }} /></div></div><div className="risk-row"><span>Integridade MDVR</span><strong>88%</strong><div className="bar warn"><span style={{ width: "88%" }} /></div></div></div></div></div></div></>;
 }
 
 function MosaicDisplay({ vehicles, external = false }: { vehicles: typeof fleetRows; external?: boolean }) {
@@ -324,13 +315,13 @@ function DetailDrawer({ risk, onClose, onToast, onUpdate, onCommand }: { risk: R
   const [status, setStatus] = useState(risk.status);
   const equipamento = equipamentoDe(risk.vehicle);
   const saveTreatment = () => {
-    const nextStatus = status === "Aguardando ação" ? "Em tratamento" : "Resolvido";
+    const nextStatus = status;
     onUpdate(risk.id, { status: nextStatus });
     try { window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify({ event: risk.id, action: "treatment", status: nextStatus, comment, at: new Date().toISOString() })); } catch { /* localStorage opcional */ }
     onToast(comment ? "Tratamento e comentário registrados." : "Tratamento registrado com sucesso.");
     onClose();
   };
-  return <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="modal-title">Detalhe do risco</div><div className="modal-desc">Evento {risk.id} · correlação de telemetria, política embarcada e evidência</div></div><button className="close-btn" onClick={onClose}><X size={15} /></button></div><div className="detail-hero" style={{ margin: 0, borderRadius: 10 }}><div className="detail-kicker">{status} · {risk.natureza === "condicao" ? "condição" : "marco"}</div><div className="detail-title">{risk.title}</div><div className="detail-sub">{risk.vehicle} · {risk.driver}</div><div className="detail-score"><strong>{risk.score}</strong><span>score de risco</span></div></div><div className="detail-section"><div className="detail-label">Contexto</div><div className="detail-text">{risk.detail}</div></div><div className="detail-section"><div className="detail-grid"><div><div className="detail-label">Localização</div><div className="detail-value">{risk.zone}</div></div><div><div className="detail-label">Detectado</div><div className="detail-value">{risk.time}</div></div><div><div className="detail-label">Perfil operacional ativo</div><div className="detail-value">{risk.perfilAtivo}</div></div><div><div className="detail-label">Ponto de controle</div><div className="detail-value">{risk.pontoDeControle ?? "Fora de ponto de controle"}</div></div><div><div className="detail-label">Equipamento</div><div className="detail-value">{equipamento.equipamento} · {equipamento.linha}</div></div><div><div className="detail-label">Canal</div><div className="detail-value">{equipamento.canal === "sem_sinal" ? "Sem sinal" : equipamento.canal === "celular" ? "Celular" : "Contingência"}</div></div></div></div><div className="detail-section"><div className="detail-label">Fluxo operacional</div><div className="detail-actions"><button className="primary-btn" onClick={() => onCommand(risk.vehicle)}><Terminal size={13} /> Comandos ao veículo</button><button className="soft-btn" onClick={() => onToast("Evidência solicitada ao MDVR.")}><Video size={13} /> Solicitar evidência</button><button className="secondary-btn" onClick={() => onToast("Localização focada no mapa operacional.")}><MapPin size={13} /> Ver localização</button></div><div className="form-hint">Comandos delegados habilitam um botão para o motorista; a central não atua diretamente na trava.</div></div><div className="detail-section"><div className="detail-label">Tratamento e auditoria</div><select className="filter-select" style={{ width: "100%", marginBottom: 9 }} value={status} onChange={(e) => setStatus(e.target.value)}><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select><textarea className="form-field" style={{ width: "100%", border: "1px solid #dfe7eb", borderRadius: 7, padding: 9, fontSize: 11, minHeight: 56, resize: "vertical" }} placeholder="Adicionar comentário do tratamento..." value={comment} onChange={(e) => setComment(e.target.value)} /><div className="audit-note">Cada alteração registra responsável, horário, status e comentário para auditoria.</div></div><div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Fechar</button><button className="primary-btn" onClick={saveTreatment}><Check size={13} /> Salvar tratamento</button></div></div></div>;
+  return <div className="modal-backdrop risk-drawer-backdrop" onClick={onClose}><div className="modal risk-drawer" role="dialog" aria-modal="true" aria-label={`Detalhe do alerta ${risk.id}`} onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="modal-title">Detalhe do risco</div><div className="modal-desc">Evento {risk.id} · correlação de telemetria, política embarcada e evidência</div></div><button className="close-btn" aria-label="Fechar detalhe" onClick={onClose}><X size={15} /></button></div><div className="detail-hero" style={{ margin: 0, borderRadius: 10 }}><div className="detail-kicker">{status} · {risk.natureza === "condicao" ? "condição" : "marco"}</div><div className="detail-title">{risk.title}</div><div className="detail-sub">{risk.vehicle} · {risk.driver}</div><div className="detail-score"><strong>{risk.score}</strong><span>score de risco</span></div></div><div className="detail-section"><div className="detail-label">Contexto</div><div className="detail-text">{risk.detail}</div></div><div className="detail-section"><div className="detail-grid"><div><div className="detail-label">Localização</div><div className="detail-value">{risk.zone}</div></div><div><div className="detail-label">Detectado</div><div className="detail-value">{risk.time}</div></div><div><div className="detail-label">Perfil operacional ativo</div><div className="detail-value">{risk.perfilAtivo}</div></div><div><div className="detail-label">Ponto de controle</div><div className="detail-value">{risk.pontoDeControle ?? "Fora de ponto de controle"}</div></div><div><div className="detail-label">Equipamento</div><div className="detail-value">{equipamento.equipamento} · {equipamento.linha}</div></div><div><div className="detail-label">Canal</div><div className="detail-value">{equipamento.canal === "sem_sinal" ? "Sem sinal" : equipamento.canal === "celular" ? "Celular" : "Contingência"}</div></div></div></div><div className="detail-section"><div className="detail-label">Fluxo operacional</div><div className="detail-actions"><button className="primary-btn" onClick={() => onCommand(risk.vehicle)}><Terminal size={13} /> Comandos ao veículo</button><button className="soft-btn" onClick={() => onToast("Evidência solicitada ao MDVR.")}><Video size={13} /> Solicitar evidência</button><button className="secondary-btn" onClick={() => onToast("Localização focada no mapa operacional.")}><MapPin size={13} /> Ver localização</button></div><div className="form-hint">Comandos delegados habilitam um botão para o motorista; a central não atua diretamente na trava.</div></div><div className="detail-section"><div className="detail-label">Tratamento e auditoria</div><select className="filter-select" style={{ width: "100%", marginBottom: 9 }} value={status} onChange={(e) => setStatus(e.target.value)}><option>Novo</option><option>Aguardando ação</option><option>Em tratamento</option><option>Resolvido</option></select><textarea className="form-field" style={{ width: "100%", border: "1px solid var(--n-4)", background: "var(--surface)", color: "var(--n-8)", borderRadius: 7, padding: 9, fontSize: 11, minHeight: 56, resize: "vertical" }} placeholder="Adicionar comentário do tratamento..." value={comment} onChange={(e) => setComment(e.target.value)} /><div className="audit-note">Cada alteração registra responsável, horário, status e comentário para auditoria.</div></div><div className="modal-actions"><button className="secondary-btn" onClick={onClose}>Fechar</button><button className="primary-btn" onClick={saveTreatment}><Check size={13} /> Salvar tratamento</button></div></div></div>;
 }
 
 function EntityModal({ kind, onClose, onToast }: { kind: "fleet" | "drivers" | "training" | "traffic" | "settings"; onClose: () => void; onToast: (message: string) => void }) {
@@ -379,7 +370,7 @@ function MainApp() {
   };
   const entityView = activeView as "fleet" | "drivers" | "training" | "traffic" | "settings";
   const body = activeView === "dashboard" ? <Dashboard search={search} onSelectRisk={openRisk} onToast={notify} onNavigate={chooseView} />
-    : activeView === "risks" ? <RisksView risks={risks} search={search} onSelectRisk={openRisk} onCommand={openCommand} />
+    : activeView === "risks" ? <RiskKanbanView risks={risks} search={search} onSelectRisk={openRisk} onCommand={openCommand} onUpdate={updateRisk} onAddRisk={(risk) => setRisks((current) => [risk, ...current])} onToast={notify} />
     : activeView === "events" ? <EventsView pontos={pontos} onToast={notify} onCommand={openCommand} />
     : activeView === "realtime" ? <RealtimeView onSelectRisk={openRisk} onToast={notify} onCommand={openCommand} />
     : activeView === "evidence" ? <EvidenceView onToast={notify} />
@@ -393,7 +384,14 @@ function MainApp() {
     : activeView === "security" ? <SecurityView onToast={notify} />
     : <FleetView view={entityView} onToast={notify} onOpenForm={() => setEntityForm(entityView)} />;
   const emWorkspace = activeView === "profiles" || activeView === "equipment" || activeView === "controlpoints" || activeView === "fences";
-  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><Sidebar active={activeView} onSelect={chooseView} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((atual) => !atual)} mobileOpen={sidebarOpen} /><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} compact /><main className={emWorkspace ? "content content-workspace profile-topbar" : "content"}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
+  const contentClass = emWorkspace
+    ? "content content-workspace profile-topbar"
+    : activeView === "dashboard"
+      ? "content dashboard-content"
+      : activeView === "risks"
+        ? "content content-compact alert-content"
+        : "content content-compact";
+  return <div className="app-shell"><div className={sidebarOpen ? "sidebar-mobile-overlay open" : "sidebar-mobile-overlay"} onClick={() => setSidebarOpen(false)} /><Sidebar active={activeView} onSelect={chooseView} collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((atual) => !atual)} mobileOpen={sidebarOpen} riskCount={risks.filter((risk) => risk.status !== "Resolvido").length} /><div className="main-area"><Topbar title={title} onSearch={setSearch} onToast={notify} compact /><main className={contentClass}>{body}</main></div>{selectedRisk ? <DetailDrawer risk={selectedRisk} onClose={() => setSelectedRisk(null)} onToast={notify} onUpdate={updateRisk} onCommand={openCommand} /> : null}{commandVehicle ? <CommandModal veiculo={commandVehicle} onClose={() => setCommandVehicle(null)} onToast={notify} /> : null}{entityForm ? <EntityModal kind={entityForm} onClose={() => setEntityForm(null)} onToast={notify} /> : null}{toast ? <div className="toast">{toast}</div> : null}<button className="mobile-menu" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button></div>;
 }
 
 export default function Home() {
