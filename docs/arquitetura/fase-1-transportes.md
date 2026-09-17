@@ -1,5 +1,10 @@
 # Fase 1 — transportes e portas
 
+> **Medição depois deste documento:** um aparelho real já conectou e o que ele
+> manda diverge da documentação em pontos que importam — cabeçalho, tipo 30 e
+> despejo de histórico ao reconectar. Ver [n9m-observado.md](n9m-observado.md),
+> que tem precedência sobre o que está escrito aqui.
+
 Levantado sobre os 25 capítulos do N9M 2.0. São fatos do protocolo, não escolha
 nossa: onde houver decisão, está marcada como tal.
 
