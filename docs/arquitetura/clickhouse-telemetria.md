@@ -48,6 +48,124 @@ O que se filtra, ordena ou agrega vira **coluna tipada**. O resto vai num
 `Map(String, String)`, e quando um campo do mapa fica quente ele é promovido a
 coluna materializada — sem reescrever o histórico.
 
+## O caminho: uma tabela de pouso, e as específicas derivadas dela
+
+O gate não escreve nas tabelas finais. Ele escreve numa **tabela de pouso**, e
+visões materializadas quebram dali para as específicas.
+
+```
+gate (Go)
+  ├─> brutos          bytes do fabricante, opacos, TTL curto
+  └─> eventos_crus    o evento neutro, um por linha
+         │  visões materializadas, disparadas na inserção
+         ├─> posicoes
+         ├─> eventos
+         └─> saude
+```
+
+O que isso compra:
+
+**Tabela derivada nova não mexe no gate.** Amanhã alguém quer `velocidades` com
+outra chave de ordenação para um relatório: cria a tabela, cria a visão, faz um
+`INSERT SELECT` do histórico. O gate não fica sabendo.
+
+**Reprocessar é uma consulta.** Quando o bloco estendido de 217 bytes do GPS for
+decifrado, ou quando algum campo do `Map` virar coluna, o histórico se refaz a
+partir de `eventos_crus` — sem esperar a frota reenviar.
+
+**Um caminho de escrita só.** O gate faz um `INSERT` por lote, não quatro.
+
+### A armadilha: a tabela de pouso é neutra, não é o payload do fabricante
+
+É aqui que o desenho pode dar errado em silêncio. A tentação é pousar o JSON da
+Streamax e deixar a visão materializada extrair `viled`, `WLM`, `DSNO`.
+
+**Não.** Isso enfia conhecimento de fabricante dentro do ClickHouse, e aí o dia
+da segunda família de aparelho exige reescrever SQL além de escrever um gate
+novo. É exatamente o acoplamento que a regra do gate substituível existe para
+impedir.
+
+Então `eventos_crus` guarda o **evento já traduzido**, em vocabulário nosso. Quem
+decodifica `viled` continua sendo o Go, num lugar só e com teste. A visão
+materializada só vê `tipo = 'posicao'` e campos com nome de negócio.
+
+O payload do fabricante fica em `brutos`, separado, opaco, sem ninguém
+consultando por dentro. É apólice de seguro, não fonte.
+
+### eventos_crus
+
+```sql
+CREATE TABLE eventos_crus
+(
+    cliente_id      UInt32,
+    dispositivo_id  UUID,
+    momento         DateTime64(3, 'UTC') CODEC(Delta, ZSTD(1)),
+    recebido_em     DateTime64(3, 'UTC') CODEC(Delta, ZSTD(1)),
+
+    tipo            LowCardinality(String),  -- 'posicao', 'entrada_digital', 'saude'
+    chave_origem    String CODEC(ZSTD(1)),   -- TASKID, SERIAL: idempotência
+    historico       Bool,
+
+    -- O evento neutro. Chaves em vocabulário de negócio, nunca do fabricante.
+    dados           String CODEC(ZSTD(1))
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(momento)
+ORDER BY (cliente_id, dispositivo_id, tipo, momento)
+TTL toDateTime(momento) + INTERVAL 90 DAY;
+```
+
+Noventa dias, contra trinta de `brutos`: reprocessar a partir do neutro é o caso
+comum, voltar ao byte do fabricante é a exceção.
+
+### As visões
+
+```sql
+CREATE MATERIALIZED VIEW mv_posicoes TO posicoes AS
+SELECT
+    cliente_id,
+    dispositivo_id,
+    momento,
+    recebido_em,
+    JSONExtractInt(dados, 'latitude_e6')       AS latitude_e6,
+    JSONExtractInt(dados, 'longitude_e6')      AS longitude_e6,
+    JSONExtractUInt(dados, 'velocidade_cm_s')  AS velocidade_cm_s,
+    JSONExtractUInt(dados, 'rumo_centesimos')  AS rumo_centesimos,
+    JSONExtractInt(dados, 'altitude_m')        AS altitude_m,
+    JSONExtractString(dados, 'qualidade')      AS qualidade,
+    historico,
+    CAST(JSONExtractKeysAndValues(dados, 'String'), 'Map(String, String)') AS extras
+FROM eventos_crus
+WHERE tipo = 'posicao';
+```
+
+Repare que nenhum nome aí é da Streamax. `qualidade` já vem `'valido'`,
+`'sem_precisao'` ou `'sem_modulo'` — a tradução do `viled` aconteceu no Go.
+
+### Três coisas sobre visão materializada que precisam estar escritas
+
+Elas surpreendem quem espera que se comportem como visão de banco relacional.
+
+**É gatilho de inserção, não consulta.** A visão enxerga só o bloco que está
+sendo inserido, nunca o que já está na tabela. Criar a visão hoje não traz nada
+de ontem.
+
+**Então tabela derivada nova precisa de carga manual do histórico:**
+
+```sql
+INSERT INTO posicoes
+SELECT ... FROM eventos_crus
+WHERE tipo = 'posicao' AND momento >= '2026-01-01';
+```
+
+Esquecer esse passo é o erro clássico: a tabela nova parece vazia e ninguém
+entende por quê.
+
+**Visão que falha pode derrubar a inserção.** Um `JSONExtract` sobre campo
+ausente devolve zero em vez de erro, o que é bom aqui — mas uma expressão que
+lance erro leva junto o `INSERT` na tabela de pouso. Por isso as visões só usam
+extração tolerante, e nunca `CAST` que possa estourar.
+
 ## As tabelas
 
 ### posicoes
