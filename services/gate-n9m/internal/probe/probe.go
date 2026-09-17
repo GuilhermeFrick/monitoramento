@@ -180,9 +180,7 @@ func (s *session) openCapture() (*os.File, error) {
 
 func (s *session) handle(frame *n9m.Frame) {
 	if !n9m.LooksLikeJSON(frame.Payload) {
-		if n := len(frame.Payload); n > 0 {
-			s.logf("    %d binary bytes, starting with %s", n, hex.EncodeToString(frame.Payload[:min(16, n)]))
-		}
+		s.handleBinary(frame)
 		return
 	}
 
@@ -207,6 +205,30 @@ func (s *session) handle(frame *n9m.Frame) {
 	case n9m.OpKeepAlive:
 		s.reply(frame.Header, n9m.KeepAliveEcho(msg.Session))
 	}
+}
+
+// handleBinary reports the payloads that are not JSON. Only the GPS special
+// report has a decoder so far; everything else is shown by size and first
+// bytes, which is enough to notice it exists and go look at the capture.
+func (s *session) handleBinary(frame *n9m.Frame) {
+	n := len(frame.Payload)
+	if n == 0 {
+		return
+	}
+	if frame.Header.Type == n9m.PayloadSpecial && frame.Header.SSRC == n9m.SpecialGPS {
+		report, err := n9m.DecodeGPS(frame.Payload)
+		if err != nil {
+			s.logf("    GPS report did not decode: %v", err)
+			return
+		}
+		s.logf("    gps %s", report)
+		if len(report.Extended) > 0 {
+			s.logf("    gps extended: %d bytes, starting with %s",
+				len(report.Extended), hex.EncodeToString(report.Extended[:min(16, len(report.Extended))]))
+		}
+		return
+	}
+	s.logf("    %d binary bytes, starting with %s", n, hex.EncodeToString(frame.Payload[:min(16, n)]))
 }
 
 // reply mirrors back the flags byte and RESERVE that arrived, instead of the

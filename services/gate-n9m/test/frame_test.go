@@ -139,8 +139,8 @@ func TestWriteFrameWithMirrorsTheHeader(t *testing.T) {
 	if out[0] != 0x99 || out[1] != byte(n9m.PayloadSpecial) {
 		t.Errorf("flags/type = %02x %02x", out[0], out[1])
 	}
-	if binary.BigEndian.Uint16(out[2:4]) != 7 {
-		t.Errorf("ssrc = %d", binary.BigEndian.Uint16(out[2:4]))
+	if binary.LittleEndian.Uint16(out[2:4]) != 7 {
+		t.Errorf("ssrc = %d", binary.LittleEndian.Uint16(out[2:4]))
 	}
 	if !bytes.Equal(out[8:12], reserved[:]) {
 		t.Errorf("reserved was not mirrored: %x", out[8:12])

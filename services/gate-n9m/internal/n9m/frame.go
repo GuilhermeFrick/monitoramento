@@ -31,6 +31,11 @@
 //     to 01. Read literally, 0x08 means V=0 and CSRC COUNT=8, which cannot be:
 //     there is not a single CSRC byte between the header and the JSON.
 //   - RESERVE is not zero, it is 52 00 00 00.
+//   - SSRC is little-endian while PAYLOAD LEN is big-endian, in the same
+//     header. GPS frames carry bytes 02 00 there. Read big-endian that is 512,
+//     which appears nowhere in the SSRC table of chapter 04; read
+//     little-endian it is 2, which is exactly "GPS data upload". The frames
+//     are GPS frames, so little-endian it is.
 //
 // # What we do about it
 //
@@ -119,7 +124,7 @@ func (t PayloadType) String() string {
 type Header struct {
 	RawFlags   byte // byte 0: V, P, M and CSRC bits, still undeciphered
 	Type       PayloadType
-	SSRC       uint16
+	SSRC       uint16 // little-endian on the wire, unlike PayloadLen
 	PayloadLen uint32
 	Reserved   [4]byte // documented as zero, observed as 52 00 00 00
 }
@@ -146,7 +151,7 @@ func DecodeHeader(b []byte) (Header, error) {
 	h := Header{
 		RawFlags:   b[0],
 		Type:       PayloadType(b[1]),
-		SSRC:       binary.BigEndian.Uint16(b[2:4]),
+		SSRC:       binary.LittleEndian.Uint16(b[2:4]),
 		PayloadLen: binary.BigEndian.Uint32(b[4:8]),
 	}
 	copy(h.Reserved[:], b[8:12])
@@ -200,7 +205,7 @@ func WriteFrameWith(w io.Writer, flags byte, reserved [4]byte, t PayloadType, ss
 	header := make([]byte, HeaderSize)
 	header[0] = flags
 	header[1] = byte(t)
-	binary.BigEndian.PutUint16(header[2:4], ssrc)
+	binary.LittleEndian.PutUint16(header[2:4], ssrc)
 	binary.BigEndian.PutUint32(header[4:8], uint32(len(payload)))
 	copy(header[8:12], reserved[:])
 	if _, err := w.Write(header); err != nil {
