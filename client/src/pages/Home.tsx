@@ -158,6 +158,14 @@ const liveVehiclePositions: Record<string, { lat: number; lng: number }> = {
   "VTR-2240": { lat: -22.743, lng: -43.704 },
 };
 
+const liveVehicleCards = {
+  "VTR-2048": { condutor: "Carlos Mendes", velocidade: "78 km/h", progresso: 68, inicio: "07:25", previsao: "10:00", estado: "em-curso" as const },
+  "VTR-2240": { condutor: "Não identificado", velocidade: "0 km/h", progresso: 100, inicio: "22:10", previsao: "06:00", estado: "parado" as const },
+  "VTR-1783": { condutor: "Ana Paula Costa", velocidade: "96 km/h", progresso: 42, inicio: "06:35", previsao: "11:40", estado: "atencao" as const },
+  "VTR-0931": { condutor: "Rafael Nunes", velocidade: "52 km/h", progresso: 84, inicio: "08:10", previsao: "09:50", estado: "em-curso" as const },
+  "VTR-3110": { condutor: "Marcos Silva", velocidade: "34 km/h", progresso: 26, inicio: "09:05", previsao: "12:20", estado: "em-curso" as const },
+};
+
 const eventFeed = [
   { color: "red", icon: Siren, title: "Fadiga detectada", desc: "VTR-2048 · Carlos Mendes · condição em curso", time: "14:32", natureza: "condicao" },
   { color: "amber", icon: Zap, title: "Macro registrada: Início de carga", desc: "VTR-3110 · Marcos Silva · marco", time: "14:28", natureza: "marco" },
@@ -290,6 +298,7 @@ function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca,
   const [cameraCount, setCameraCount] = useState(4);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>(["VTR-2048", "VTR-1783"]);
   const [monitorMode, setMonitorMode] = useState<"single" | "mosaic">("single");
+  const [vehicleView, setVehicleView] = useState<"arvore" | "cards">("arvore");
   const [mapRevision, setMapRevision] = useState(0);
   const [showMapLayers, setShowMapLayers] = useState(true);
   const selectedVehicle = veiculo.atual || configs[0]?.veiculo || fleetRows[0].vehicle;
@@ -314,7 +323,7 @@ function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca,
   const selectedInMosaic = selectedVehicles.includes(selectedVehicle);
 
   return <div className="wsp monitor-wsp">
-    <div className={`wsp-corpo sem-inspetor ${arvore.estado.painelRecolhido ? "nav-recolhida" : ""}`}>
+    <div className={`wsp-corpo sem-inspetor ${arvore.estado.painelRecolhido ? "nav-recolhida" : ""} ${vehicleView === "cards" ? "nav-cards" : ""}`}>
       <VehicleNavigator
         configs={configs}
         selecionado={selectedVehicle}
@@ -323,6 +332,9 @@ function RealtimeView({ configs, veiculo, arvore, busca, onBusca, onLimparBusca,
         onLimparBusca={onLimparBusca}
         onSelecionar={selectVehicle}
         arvore={arvore}
+        modo={vehicleView}
+        onModo={setVehicleView}
+        cards={liveVehicleCards}
       />
       <section className="monitor-main">
         <header className="monitor-workspace-toolbar">

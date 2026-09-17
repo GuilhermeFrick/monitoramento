@@ -876,6 +876,8 @@ tbody tr:hover { background: var(--n-1); }
 /* Monitoramento usa o mesmo shell denso do Perfil Operacional. A árvore fica
    estável entre as telas e mapa/câmeras ocupam toda a altura útil do notebook. */
 .monitor-wsp { background: var(--n-1); }
+.monitor-wsp .wsp-corpo.nav-cards:not(.nav-recolhida) { grid-template-columns: 268px minmax(0, 1fr); }
+.monitor-wsp .wsp-nav-titulo { gap: 5px; }
 .monitor-main { overflow: hidden; }
 .monitor-workspace-toolbar { flex: 0 0 auto; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--n-2); background: var(--surface); }
 .monitor-selected { min-width: 0; display: flex; align-items: center; gap: 7px; }
@@ -1459,6 +1461,9 @@ tbody tr:hover { background: var(--n-1); }
 .wsp-nav-toggle:hover { border-color: var(--brand-border); color: var(--brand-fg); background: var(--brand-bg); }
 .wsp-nav-search { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 6px; color: var(--n-7); background: transparent; }
 .wsp-nav-search:hover { color: var(--brand-fg); background: var(--brand-bg); }
+.wsp-nav-modos { flex: 0 0 auto; display: flex; gap: 2px; padding: 2px; border-radius: 6px; background: var(--n-2); }
+.wsp-nav-modos button { width: 23px; height: 23px; padding: 0; border: 0; border-radius: 5px; display: grid; place-items: center; color: var(--n-6); background: transparent; }
+.wsp-nav-modos button:hover { color: var(--brand-fg); }.wsp-nav-modos button.ativo { color: #fff; background: var(--brand-fill); box-shadow: 0 1px 3px rgba(0,0,0,.16); }
 .wsp-nav-busca { height: 29px; margin-top: 5px; display: flex; align-items: center; gap: 5px; padding: 0 6px 0 8px; border: 1px solid var(--n-3); border-radius: 6px; background: var(--surface); color: var(--n-6); }
 .wsp-nav-busca:focus-within { border-color: var(--brand-fg); box-shadow: 0 0 0 2px rgba(0,120,212,.1); }
 .wsp-nav-busca input { width: 100%; min-width: 0; border: 0; outline: 0; font-size: 10.5px; color: var(--n-8); }
@@ -1497,6 +1502,14 @@ tbody tr:hover { background: var(--n-1); }
 .wsp-veiculo .wsp-status-rascunho { background: var(--warn-fill); }
 .wsp-veiculo .wsp-status-falha { background: var(--danger-fill); }
 .wsp-veiculo .wsp-status-nunca_embarcado { background: var(--n-6); }
+.wsp-vehicle-cards { display: grid; gap: 6px; padding: 2px; }
+.wsp-vehicle-card { position: relative; width: 100%; min-width: 0; display: grid; gap: 6px; padding: 9px 10px 8px; border: 1px solid var(--n-3); border-radius: 8px; color: var(--n-7); background: var(--surface); text-align: left; box-shadow: 0 2px 8px rgba(0,0,0,.035); }
+.wsp-vehicle-card:hover { border-color: var(--brand-border); background: var(--n-1); }.wsp-vehicle-card.ativo { border-color: var(--brand-fg); background: var(--brand-bg); box-shadow: inset 3px 0 var(--brand-fg), 0 3px 11px rgba(0,95,184,.1); }
+.wsp-card-top, .wsp-card-mid, .wsp-card-route { min-width: 0; display: flex; align-items: center; }
+.wsp-card-top { gap: 6px; }.wsp-card-top > strong { color: var(--n-9); font-size: 11.5px; letter-spacing: .01em; }.wsp-card-top > i { overflow: hidden; padding: 2px 5px; border-radius: 4px; color: var(--brand-fg); background: var(--brand-bg); font-size: 7px; font-style: normal; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }.wsp-card-top > .wsp-mini-status { position: static; margin-left: auto; border-color: var(--surface); }
+.wsp-card-mid { gap: 6px; }.wsp-card-mid > b { min-width: 0; flex: 1; overflow: hidden; color: var(--n-8); font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }.wsp-card-mid > small { flex: 0 0 auto; color: var(--n-7); font: 500 8px 'DM Mono', monospace; }.wsp-card-mid > svg { flex: 0 0 auto; color: var(--n-6); }
+.wsp-card-profile { justify-self: start; max-width: 100%; overflow: hidden; padding: 2px 5px; border-radius: 4px; color: var(--n-7); background: var(--n-2); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.wsp-card-route { gap: 6px; }.wsp-card-route > small { flex: 0 0 auto; color: var(--n-6); font: 500 6.5px 'DM Mono', monospace; }.wsp-card-route > i { flex: 1; height: 4px; overflow: hidden; border-radius: 99px; background: var(--n-3); }.wsp-card-route > i > b { display: block; height: 100%; border-radius: inherit; background: var(--brand-action); }.wsp-card-route > i > b.em-curso { background: var(--ok-fg); }.wsp-card-route > i > b.atencao { background: var(--warn-fg); }.wsp-card-route > i > b.parado { background: var(--n-6); }
 .wsp-vazio { padding: 14px; font-size: 12px; color: var(--n-6); }
 
 /* ----------------------------------------------------------------- painel grafo */
@@ -1760,12 +1773,18 @@ tbody tr:hover { background: var(--n-1); }
 /* ------------------------------------------------------------------ breakpoints */
 @media (max-width: 1099px) {
   .wsp-corpo, .wsp-corpo.sem-inspetor { grid-template-columns: 230px minmax(0, 1fr); }
+  .monitor-wsp .wsp-corpo.nav-cards:not(.nav-recolhida) { grid-template-columns: 250px minmax(0, 1fr); }
   .wsp-corpo.nav-recolhida, .wsp-corpo.nav-recolhida.sem-inspetor { grid-template-columns: 58px minmax(0, 1fr); }
   .wsp-inspetor { width: min(370px, calc(100% - 58px)); }
 }
 @media (max-width: 1023px) {
   .content-workspace { height: calc(100dvh - 72px); overflow: hidden; }
   .wsp-corpo, .wsp-corpo.sem-inspetor { grid-template-columns: 190px minmax(0, 1fr); }
+  .monitor-wsp .wsp-corpo.nav-cards:not(.nav-recolhida) { grid-template-columns: 225px minmax(0, 1fr); }
+  .monitor-wsp .wsp-nav-titulo { gap: 3px; font-size: 10px; letter-spacing: .04em; }
+  .monitor-wsp .wsp-nav-titulo > span { padding-inline: 5px; }
+  .monitor-wsp .wsp-nav-search, .monitor-wsp .wsp-nav-toggle { width: 25px; height: 25px; }
+  .monitor-wsp .wsp-nav-modos button { width: 20px; height: 21px; }
   .wsp-corpo.nav-recolhida, .wsp-corpo.nav-recolhida.sem-inspetor { grid-template-columns: 58px minmax(0, 1fr); }
   .wsp-nav { max-height: none; }
   .wsp-nav-head { padding: 8px 9px 6px; }
@@ -1827,6 +1846,7 @@ tbody tr:hover { background: var(--n-1); }
 @media (max-width: 900px) { .content-workspace { height: calc(100dvh - 64px); } }
 @media (max-width: 640px) {
   .wsp-corpo, .wsp-corpo.sem-inspetor { grid-template-columns: 150px minmax(0, 1fr); }
+  .monitor-wsp .wsp-corpo.nav-cards:not(.nav-recolhida) { grid-template-columns: 205px minmax(0, 1fr); }
   .wsp-corpo.nav-recolhida, .wsp-corpo.nav-recolhida.sem-inspetor { grid-template-columns: 50px minmax(0, 1fr); }
   .wsp-nav-atalhos button { width: 38px; }
 }
