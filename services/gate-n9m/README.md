@@ -1,55 +1,76 @@
 # gate-n9m
 
 A borda do N9M. Hoje tem duas coisas: o codec de enquadramento, que é
-definitivo, e a **sonda**, que é instrumento de bancada e vai embora quando o
-gate existir.
+definitivo, e a **sonda** (`cmd/probe`), que é instrumento de bancada e sai de
+cena quando o gate existir.
 
-## Por que uma sonda antes do gate
+> **Convenção:** código em inglês — identificadores, comentários e nomes de
+> arquivo. A documentação de arquitetura em `docs/` continua em português.
 
-O capítulo 02 descreve o cabeçalho e o 03 descreve a autenticação, mas
-documentação de fabricante e fio nem sempre concordam. A sonda escuta, decodifica
-e mostra o que o aparelho manda de verdade — e grava os bytes crus, para a
-discordância ficar registrada em vez de virar lembrança.
+## Estrutura
 
-Ela responde a duas coisas só, `CONNECT` e `KEEPALIVE`, porque sem isso a sessão
-cai em 5 segundos e nunca chegamos a ver telemetria. Todo o resto é registrado e
-não respondido, de propósito: sonda que diz sim para qualquer comando faz o
-aparelho agir, e aí deixou de ser sonda.
+```
+cmd/probe/           flags e ligação das peças
+internal/n9m/        o protocolo
+  frame.go           cabeçalho de 12 bytes, leitura e escrita
+  message.go         envelope JSON, CONNECT, KEEPALIVE
+internal/probe/      o servidor de escuta da sonda
+tools/watch.py       visualizador ao vivo do log
+```
 
-Ela **não** consulta cadastro e aceita qualquer `DSNO`. É o oposto do que o gate
-vai fazer — o protocolo manda recusar aparelho desconhecido. Por isso ela só
-roda em bancada, nunca em endereço público.
+`internal/n9m` não sabe que existe socket e `internal/probe` não sabe decodificar
+cabeçalho. É o que vai permitir o gate reusar o codec sem arrastar junto o
+comportamento de sonda, que é o oposto do que o gate precisa fazer.
 
 ## Rodar
 
 ```bash
-go run ./cmd/sonda -porta 7001 -responder -saida ./capturas
+go run ./cmd/probe -addr :7001 -reply -capture ./captures
+./tools/watch.py /caminho/do/log      # visão legível, uma linha por mensagem
 ```
 
 | Flag | Efeito |
 |---|---|
-| `-porta` | porta TCP de escuta, padrão 7001 |
-| `-responder` | mantém a sessão viva; sem ela a sonda fica muda e o aparelho reconecta |
-| `-saida` | diretório para os bytes crus, um arquivo por conexão |
+| `-addr` | endereço de escuta, padrão `:7001` |
+| `-reply` | mantém a sessão viva; sem ela a sonda fica muda e o aparelho reconecta |
+| `-capture` | diretório para os bytes crus, um arquivo por conexão |
+| `-maskcmd` | quais fluxos de histórico aceitamos no `CONNECT` |
 
-Depois aponte o **Servidor 2** do MDVR (`Configuração → Definição de rede →
-Definição de servidor`) para o IP desta máquina. O `Servidor 1` continua na
-Avansat pelo 4G, então nada para de funcionar enquanto se observa.
+Depois aponte o endereço de servidor do MDVR para esta máquina. Nos aparelhos
+testados a conexão é com **um servidor de cada vez**, então um slot reserva só
+recebe tráfego quando o principal falha — para observar de verdade, aponte o
+slot que está em uso.
+
+## Por que uma sonda antes do gate
+
+Documentação de fabricante e fio nem sempre concordam, e neste caso não
+concordaram. A sonda escuta, decodifica e grava os bytes crus, para a
+discordância ficar registrada em vez de virar lembrança. O que ela achou está em
+[docs/arquitetura/n9m-observado.md](../../docs/arquitetura/n9m-observado.md).
+
+Ela responde só a `CONNECT` e `KEEPALIVE`, porque sem isso a sessão cai em 5
+segundos e nunca se vê telemetria. Todo o resto é registrado e não respondido, de
+propósito: sonda que diz sim para qualquer comando faz o aparelho agir, e aí
+deixou de ser sonda.
+
+Ela **não** consulta cadastro e aceita qualquer serial. É o oposto do que o gate
+vai fazer — o capítulo 03 manda recusar aparelho desconhecido. Por isso ela só
+roda em bancada, nunca em endereço público.
 
 ## O codec
 
-`interno/n9m` implementa o cabeçalho de 12 bytes do capítulo 02. Duas decisões
-que valem dizer em voz alta:
+Três decisões que vale dizer em voz alta, e todas vieram de medição:
 
-**Versão diferente de 1 é erro, não aviso.** Significa que o enquadramento
-saiu de lugar, e seguir lendo dali produz payloads absurdos e alocações enormes.
-Derruba a conexão; o aparelho reconecta.
+**Versão não é verificada.** A checagem que existia exigia `V=1` nos dois bits
+mais altos e derrubava toda conexão do aparelho real. Só o limite de tamanho
+protege contra dessincronismo agora.
 
-**Cifrado continua cifrado.** Sem a chave, `LerQuadro` devolve os bytes como
-vieram e sinaliza pelo cabeçalho. Fingir que o payload é legível seria pior que
-falhar.
+**Compressão é detectada pela assinatura gzip**, não pelo bit `M`, cuja posição
+não dá para confirmar num quadro onde quase tudo é zero.
 
-Os testes montam os cabeçalhos à mão a partir da tabela da documentação, não a
-partir do código — é a única forma de o teste discordar de um erro de leitura da
-tabela. Trocar as máscaras de `P` e `M` faz dois deles quebrarem, que foi como se
-verificou que eles têm dente.
+**Cifrado continua cifrado.** Sem a chave, os bytes voltam como vieram e a flag
+fica no cabeçalho. Fingir que o payload é legível seria pior que falhar.
+
+Os testes montam os cabeçalhos à mão a partir da tabela da documentação **e** a
+partir dos bytes reais capturados. Os dois conjuntos discordam, e é essa
+discordância que o `TestDecodeRealDeviceHeader` guarda.
