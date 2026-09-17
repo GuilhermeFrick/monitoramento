@@ -48,8 +48,9 @@ preview e em playback, `"58.250.161.104:15618"` em evidência.
 de uma função desde o primeiro dia, mesmo havendo um nó só.
 
 O campo é opcional: sem ele o aparelho usa o endereço gravado nos parâmetros
-dele. **Vamos sempre enviá-lo**, porque endereço gravado no aparelho é endereço
-que só muda com visita técnica.
+dele. **Vamos sempre enviá-lo**, porque o endereço gravado é um só e vale para o
+aparelho inteiro — é o `IPANDPORT` que permite mandar cada tarefa de mídia para
+um nó diferente, e isso é a definição de balancear.
 
 ## Como uma conexão de mídia se liga a uma sessão
 
@@ -248,8 +249,20 @@ três coisas que mudam o plano da fase 1 para melhor.
 **TLS é caixa de seleção, com porta separada.** A tela tem `TLS Activar` e, para
 cada servidor, duas portas: uma `TCP` e uma `TLS`. Do lado do aparelho cifrar não
 custa nada — o custo é só nosso, um certificado e um segundo listener. Então não
-há motivo para a fase 1 subir em claro: a frota instalada guarda endereço e porta
-nos parâmetros dela, e mudar isso depois é visita técnica.
+há motivo para a fase 1 subir em claro. Migrar a frota depois não exige visita
+técnica — ver abaixo —, mas exige campanha de reconfiguração remota com aparelho
+offline no meio do caminho. Nascer cifrado evita a campanha inteira.
+
+**O endereço é um nome, não um IP.** O `Servidor 1` do aparelho de bancada aponta
+para `mdvr.avansat.com.br`, que resolve para `200.155.159.176`. Duas
+consequências: já existe endereço público N9M da Avansat no ar, então a fase 2
+não começa do zero em infraestrutura; e a frota se repõe por DNS, sem tocar em
+aparelho. O que o DNS **não** move é a porta — essa só muda por parâmetro.
+
+E parâmetro se empurra remotamente: o capítulo 12 define `CONFIGMODEL SET` pela
+própria sinalização. Endereço e porta de aparelho já instalado mudam à distância,
+desde que ele ainda conecte em **algum** dos slots. São três, e é para isso que o
+terceiro serve.
 
 **Sinalização e mídia são endereços independentes no aparelho.** Há
 `Endereço do servidor registrado` e `Endereço do servidor de mídia`, cada um com
@@ -258,7 +271,8 @@ gravado é o padrão, e o comando de sinalização sobrepõe quando quer mandar 
 aparelho para outro nó. Os dois caminhos existem porque servem a momentos
 diferentes.
 
-**São dois servidores, não um.** A tela tem `Servidor 1` e `Servidor 2`, e o
+**São três servidores, não um.** A tela tem `Servidor 1`, `Servidor 2` e
+`Servidor 3`, e o
 campo `SC` do `CONNECT` — "connect to the server subscript at this time, starting
 from 0" — diz em qual dos dois o aparelho está. Isso é failover que já vem no
 aparelho, sem balanceador e sem custo nosso além de subir o segundo endereço. Na
