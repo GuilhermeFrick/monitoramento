@@ -298,6 +298,9 @@ TypeScript, junto do resto do domínio.
 
 ### Fase 1, o que dá para fazer já
 
+Os transportes de cada canal, as portas e o recorte do que entra e do que
+fica de fora estão em [fase-1-transportes.md](fase-1-transportes.md).
+
 Um processo de sinalização e um de mídia, ambos em Go, publicando no contrato
 neutro. Do outro lado da fronteira, enriquecimento e ingestão em TypeScript,
 gravando em Postgres e ClickHouse. O gate entrega sempre o mesmo endereço de
@@ -367,6 +370,8 @@ storage, o argumento a favor da URL assinada fica mais forte dos dois lados.
    se a fase 2 é para daqui a seis meses ou dois anos.
 4. **Qual fatia da frota declara `EV: V2.0`.** Decide se o upload direto ao
    storage é o caminho principal ou a exceção.
-5. **Protocolo de entrega ao navegador**: WebRTC tem a latência que a parede de
-   câmeras pede, HLS é mais simples e atrasa alguns segundos. Para intercom
-   (capítulo 20), só WebRTC serve.
+5. **Protocolo de entrega ao navegador**: WebSocket com os quadros crus é o
+   caminho mais curto e já tem parser escrito no app; WebRTC tem a latência que
+   a parede de câmeras pede e é o único que serve para intercom (capítulo 20);
+   HLS é mais simples de operar e atrasa alguns segundos. Recomendação para a
+   fase 1 em [fase-1-transportes.md](fase-1-transportes.md).
