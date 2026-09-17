@@ -1,35 +1,53 @@
 # syntax=docker/dockerfile:1
+#
+# Imagem do app. O contexto é a RAIZ do monorepo, não frontend/: desde que o
+# front passou a depender de @avansat/contratos por workspace, um contexto
+# restrito à pasta do front não enxerga o pacote e a instalação quebra.
 
 FROM node:24-alpine AS build
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-
-WORKDIR /app
+WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
+# Manifestos primeiro, para a camada de instalação só invalidar quando a árvore
+# de dependências mudar de verdade.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY frontend/package.json ./frontend/
+COPY packages/contratos/package.json ./packages/contratos/
+COPY services/api-falsa/package.json ./services/api-falsa/
+COPY services/api/package.json ./services/api/
+COPY services/ingestao/package.json ./services/ingestao/
+COPY services/workers/package.json ./services/workers/
+COPY frontend/patches ./frontend/patches
 
 RUN pnpm install --frozen-lockfile
 
-COPY . .
+COPY packages ./packages
+COPY frontend ./frontend
 
-ARG VITE_MAP_TILE_URL
-ARG VITE_MAP_ATTRIBUTION
-RUN pnpm build
+RUN pnpm --filter avansat-risk build
 
 FROM node:24-alpine AS runtime
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
-WORKDIR /app
+# O layout do workspace é preservado de propósito. Em pnpm, frontend/node_modules
+# é só um punhado de symlinks para ../../node_modules/.pnpm; copiar aquela pasta
+# para outro lugar deixa todo link apontando para o vazio, e o processo morre no
+# primeiro import com ERR_MODULE_NOT_FOUND. Mantendo os mesmos caminhos
+# relativos, os links continuam válidos.
+WORKDIR /repo/frontend
 
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+COPY --from=build /repo/node_modules /repo/node_modules
+COPY --from=build /repo/packages /repo/packages
+COPY --from=build /repo/package.json /repo/pnpm-workspace.yaml /repo/
+COPY --from=build /repo/frontend/node_modules ./node_modules
+COPY --from=build /repo/frontend/package.json ./package.json
+COPY --from=build /repo/frontend/dist ./dist
 
 EXPOSE 3000
 

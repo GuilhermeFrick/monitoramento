@@ -115,3 +115,6 @@ client/public/__manus__/version.json
 
 # Claude Code: settings.json é do time; settings.local.json é pessoal
 .claude/settings.local.json
+
+# Monorepo
+frontend/dist/

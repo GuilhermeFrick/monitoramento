@@ -1,6 +1,9 @@
 services:
   app:
     build:
+      # Contexto é a raiz do monorepo: o front depende de @avansat/contratos
+      # por workspace. Os bancos de desenvolvimento estão em infra/compose.yaml,
+      # à parte — este arquivo sobe só a aplicação.
       context: .
       args:
         VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}

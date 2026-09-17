@@ -1,0 +1,14 @@
+{
+  "name": "@avansat/api-falsa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/servidor.ts",
+    "start": "tsx src/servidor.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "@avansat/contratos": "workspace:*" },
+  "devDependencies": { "tsx": "^4.19.1", "typescript": "5.9.3", "vitest": "^2.1.4", "@types/node": "^24.7.0" }
+}

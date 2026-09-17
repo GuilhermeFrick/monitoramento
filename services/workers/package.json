@@ -1,0 +1,8 @@
+{
+  "name": "@avansat/workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "echo 'esqueleto: sem código a verificar'", "test": "echo 'esqueleto: sem teste'" },
+  "dependencies": { "@avansat/contratos": "workspace:*" }
+}

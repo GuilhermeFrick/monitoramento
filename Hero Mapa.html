@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Hero — mapa América do Sul</title>
+<script src="https://unpkg.com/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #0F1115;
+    --accent: #4DA3FF;
+    --land: #1B2230;
+    --land-hi: #232C3D;
+    --stroke: #2E3A4F;
+    --ink: #E9EDF5;
+    --muted: #9AA3B5;
+  }
+  body { margin:0; background:#0a0b0e; font-family:Inter, system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  #hero { position:relative; width:1600px; height:760px; overflow:hidden; background:var(--ground); border-radius:10px; }
+  #map { position:absolute; inset:0; }
+  #map svg { display:block; width:100%; height:100%; }
+  .scrim { position:absolute; inset:0; pointer-events:none; }
+  .scrim.left { background:linear-gradient(100deg, rgba(15,17,21,.97) 0%, rgba(15,17,21,.9) 26%, rgba(15,17,21,.45) 48%, rgba(15,17,21,0) 72%); }
+  .scrim.vert { background:linear-gradient(to bottom, rgba(15,17,21,.85) 0%, rgba(15,17,21,0) 22%, rgba(15,17,21,0) 62%, rgba(15,17,21,.92) 100%); }
+  .scrim.glow { background:radial-gradient(52% 58% at 62% 46%, rgba(77,163,255,.16) 0%, rgba(77,163,255,0) 68%); }
+  .ui { position:absolute; inset:0; display:grid; grid-template-rows:auto 1fr auto; padding:40px 44px; }
+  .top { display:flex; align-items:flex-start; justify-content:space-between; gap:40px; }
+  h1 { margin:0; font-size:38px; font-weight:600; letter-spacing:-.02em; color:var(--ink); }
+  .kicker { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .kicker span { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); }
+  .kicker i { width:22px; height:2px; background:var(--accent); display:block; }
+  .counts { display:flex; gap:28px; align-items:center; }
+  .count { display:flex; align-items:baseline; gap:8px; }
+  .count b { font-size:26px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .count span { font-size:12px; color:var(--muted); letter-spacing:.04em; }
+  .panel { align-self:start; margin-top:30px; width:310px; display:flex; flex-direction:column; gap:12px; }
+  .km { border:1px solid rgba(77,163,255,.32); border-radius:8px; padding:16px 18px; background:rgba(77,163,255,.07); }
+  .km b { display:block; font-size:28px; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .km span { font-size:12px; color:var(--muted); }
+  .tri { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .tri div { border:1px solid var(--stroke); border-radius:8px; padding:13px 12px; background:rgba(27,34,48,.72); }
+  .tri b { display:block; font-size:24px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .tri span { font-size:11px; color:var(--muted); }
+  .trips { border:1px solid var(--stroke); border-radius:8px; background:rgba(27,34,48,.72); padding:14px 16px 6px; }
+  .trips > p { margin:0 0 12px; font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+  .trip { display:flex; align-items:center; gap:12px; padding-bottom:12px; }
+  .trip .dot { width:26px; height:26px; border-radius:50%; flex:none; background:var(--land-hi); border:1px solid var(--stroke); }
+  .trip .who { flex:1; min-width:0; }
+  .trip .who b { display:block; font-size:13px; font-weight:600; color:var(--ink); }
+  .trip .who span { font-size:11px; color:var(--muted); }
+  .trip em { font-style:normal; font-size:14px; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums; }
+  .bottom { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
+  .brand { font-size:17px; font-weight:700; letter-spacing:.08em; color:var(--ink); }
+  .brand small { display:block; font-size:9px; font-weight:500; letter-spacing:.3em; color:var(--muted); margin-top:2px; }
+  .stamp { font-size:14px; color:var(--muted); }
+  .stamp b { color:var(--ink); font-weight:600; }
+  .pin { fill:var(--accent); }
+  .cluster text { font-size:11px; font-weight:600; fill:#0B1220; }
+</style>
+</head>
+<body>
+<div id="hero">
+  <div id="map"></div>
+  <div class="scrim glow"></div>
+  <div class="scrim left"></div>
+  <div class="scrim vert"></div>
+
+  <div class="ui">
+    <div class="top">
+      <div>
+        <div class="kicker"><i></i><span>Operação em tempo real</span></div>
+        <h1>Delta Fleet Demonstração</h1>
+      </div>
+      <div class="counts">
+        <div class="count"><b>256</b><span>carretas</span></div>
+        <div class="count"><b>21</b><span>leves</span></div>
+        <div class="count"><b>12</b><span>vans</span></div>
+        <div class="count"><b>23</b><span>implementos</span></div>
+        <div class="count"><b>2</b><span>máquinas</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="km"><b>2.836,86</b><span>km hoje</span></div>
+      <div class="tri">
+        <div><b>7</b><span>Em percurso</span></div>
+        <div><b>22</b><span>Estacionados</span></div>
+        <div><b>34</b><span>Lig./parados</span></div>
+      </div>
+      <div class="trips">
+        <p>Maiores viagens</p>
+        <div class="trip"><span class="dot"></span><span class="who"><b>CPX-1E16</b><span>Em percurso</span></span><em>143 km</em></div>
+        <div class="trip"><span class="dot"></span><span class="who"><b>SEN-1A00</b><span>Em percurso</span></span><em>88 km</em></div>
+        <div class="trip"><span class="dot"></span><span class="who"><b>CPX-1B05</b><span>Em percurso</span></span><em>70 km</em></div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div class="brand">DELTA<small>FLEET</small></div>
+      <div class="stamp">Hoje, <b>04 de abril</b> de 2023 &nbsp;<b>09:40</b></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const W = 1600, H = 760;
+const SA = new Set(['Brazil','Argentina','Chile','Bolivia','Peru','Paraguay','Uruguay','Ecuador','Colombia','Venezuela','Guyana','Suriname','France','Falkland Is.','Panama','Costa Rica','Nicaragua','Honduras','Trinidad and Tobago']);
+
+d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json').then(topo => {
+  const all = topojson.feature(topo, topo.objects.countries);
+  const region = { type:'FeatureCollection', features: all.features.filter(f => SA.has(f.properties.name)) };
+  const focus = { type:'FeatureCollection', features: all.features.filter(f => ['Brazil','Argentina','Chile','Bolivia','Peru','Paraguay','Uruguay'].includes(f.properties.name)) };
+
+  const projection = d3.geoMercator().fitExtent([[W*0.30, 26],[W*0.985, H-26]], region);
+  const path = d3.geoPath(projection);
+
+  const svg = d3.select('#map').append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio','xMidYMid slice');
+
+  const defs = svg.append('defs');
+  const lg = defs.append('linearGradient').attr('id','landgrad').attr('x1','0').attr('y1','0').attr('x2','.4').attr('y2','1');
+  lg.append('stop').attr('offset','0').attr('stop-color','#243043');
+  lg.append('stop').attr('offset','1').attr('stop-color','#171D28');
+
+  const graticule = d3.geoGraticule().step([10,10]);
+  svg.append('path').datum(graticule()).attr('d', path)
+    .attr('fill','none').attr('stroke','#1B2230').attr('stroke-width',.6);
+
+  svg.append('g').selectAll('path').data(region.features).join('path')
+    .attr('d', path)
+    .attr('fill', d => focus.features.includes(d) ? 'url(#landgrad)' : '#161C26')
+    .attr('stroke', d => focus.features.includes(d) ? '#32405A' : '#222A38')
+    .attr('stroke-width', .9);
+
+  svg.append('g').selectAll('path').data(region.features).join('path')
+    .attr('d', path).attr('fill','none')
+    .attr('stroke','#4DA3FF').attr('stroke-opacity',.14).attr('stroke-width',2.2);
+
+  // [nome, lon, lat, destaque, ancoragem]  'e' = rótulo à esquerda do ponto
+  const cities = [
+    ['São Paulo',-46.63,-23.55,1,'e'],['Rio de Janeiro',-43.17,-22.91,1,'s'],['Brasília',-47.93,-15.78,1,'e'],
+    ['Curitiba',-49.27,-25.43,0,'e'],['Porto Alegre',-51.23,-30.03,0,'e'],['Belo Horizonte',-43.94,-19.92,0,'s'],
+    ['Salvador',-38.5,-12.97,0,'s'],['Recife',-34.88,-8.05,0,'s'],['Fortaleza',-38.54,-3.72,0,'s'],
+    ['Manaus',-60.02,-3.1,0,'e'],['Campo Grande',-54.6,-20.45,0,'e'],
+    ['Bogotá',-74.07,4.71,0,'e'],['Lima',-77.03,-12.05,0,'e'],['Santiago',-70.65,-33.45,0,'e'],
+    ['Buenos Aires',-58.38,-34.6,0,'e'],['Assunção',-57.58,-25.28,0,'e']
+  ];
+
+  const g = svg.append('g');
+  cities.forEach(([name, lon, lat, big, side]) => {
+    const p = projection([lon, lat]); if (!p) return;
+    const left = side === 'e';
+    if (big) {
+      g.append('circle').attr('cx',p[0]).attr('cy',p[1]).attr('r',16)
+        .attr('fill','#4DA3FF').attr('fill-opacity',.12);
+    }
+    g.append('circle').attr('cx',p[0]).attr('cy',p[1]).attr('r', big ? 4.5 : 2.6)
+      .attr('fill','#4DA3FF').attr('fill-opacity', big ? .95 : .55);
+    g.append('text')
+      .attr('x', p[0] + (left ? -(big ? 10 : 7) : (big ? 10 : 7)))
+      .attr('y', p[1] + (big ? 4 : 3.5))
+      .attr('text-anchor', left ? 'end' : 'start')
+      .attr('fill', big ? '#CFE4FF' : '#7E8CA3')
+      .attr('font-size', big ? 13 : 10.5)
+      .attr('font-weight', big ? 600 : 500)
+      .attr('font-family','Inter, sans-serif')
+      .text(name);
+  });
+
+  const routes = [[[-46.63,-23.55],[-47.93,-15.78]],[[-46.63,-23.55],[-49.27,-25.43]],[[-43.17,-22.91],[-46.63,-23.55]],[[-47.93,-15.78],[-49.25,-16.68]],[[-49.27,-25.43],[-51.23,-30.03]],[[-54.6,-20.45],[-46.63,-23.55]]];
+  svg.append('g').selectAll('path').data(routes).join('path')
+    .attr('d', d => path({ type:'LineString', coordinates:d }))
+    .attr('fill','none').attr('stroke','#4DA3FF').attr('stroke-opacity',.5)
+    .attr('stroke-width',1.4).attr('stroke-dasharray','5 4');
+
+  [[-48.9,-22.4,2],[-52.1,-27.6,12]].forEach(([lon,lat,n]) => {
+    const p = projection([lon,lat]); if (!p) return;
+    const c = svg.append('g').attr('class','cluster');
+    c.append('circle').attr('cx',p[0]).attr('cy',p[1]).attr('r',15).attr('fill','#4DA3FF').attr('fill-opacity',.18);
+    c.append('circle').attr('cx',p[0]).attr('cy',p[1]).attr('r',11).attr('fill','#4DA3FF');
+    c.append('text').attr('x',p[0]).attr('y',p[1]+4).attr('text-anchor','middle').text(n)
+      .attr('font-family','Inter, sans-serif');
+  });
+});
+</script>
+</body>
+</html>
