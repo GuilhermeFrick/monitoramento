@@ -1,9 +1,39 @@
+# A pilha inteira, num comando:
+#
+#   docker compose up -d --build
+#
+# Os bancos vêm de infra/compose.yaml por `include`, e não copiados para cá: o
+# arquivo de infra continua servindo sozinho para quem só quer os bancos em
+# desenvolvimento, com `docker compose -f infra/compose.yaml up -d`.
+include:
+  - infra/compose.yaml
+
 services:
+  api:
+    build:
+      # Contexto é a raiz do monorepo: a API depende de @avansat/contratos por
+      # workspace, e um contexto restrito a services/api não enxerga o pacote.
+      context: .
+      dockerfile: services/api/Dockerfile
+    ports:
+      - "${API_PORT:-4001}:4001"
+    environment:
+      PORTA_API: 4001
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: avansat
+      PGPASSWORD: avansat
+      PGDATABASE: avansat
+    depends_on:
+      # `service_healthy`, não `service_started`: o Postgres aceita conexão TCP
+      # antes de terminar de rodar os scripts de inicialização, e a API subiria
+      # contra um banco sem tabela.
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   app:
     build:
-      # Contexto é a raiz do monorepo: o front depende de @avansat/contratos
-      # por workspace. Os bancos de desenvolvimento estão em infra/compose.yaml,
-      # à parte — este arquivo sobe só a aplicação.
       context: .
       args:
         VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
@@ -13,5 +43,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      OPENROUTESERVICE_API_KEY: eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZiZjk3MGYzZTAwOTQwYWU5ZDMzZTI5YmIyYTk4N2ZjIiwiaCI6Im11cm11cjY0In0=
+      OPENROUTESERVICE_API_KEY: ${OPENROUTESERVICE_API_KEY:-}
+    depends_on:
+      - api
     restart: unless-stopped
