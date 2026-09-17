@@ -119,9 +119,9 @@ protocolo de baixa latência até o navegador: fica para depois da medição.
    e obrigatório se intercom entrar). Recomendo WebSocket na fase 1 justamente
    porque há código de parsing já escrito e testado do outro lado.
 2. **Endereço público e portas.** Precisa de IP estável alcançável pela frota.
-3. **TLS.** O N9M não obriga. Decidir se a sinalização sobe em TCP puro na fase
-   1 e ganha TLS depois, ou já nasce cifrada — a segunda opção custa pouco
-   agora e muito depois, quando houver frota instalada com endereço gravado.
+3. ~~**TLS.**~~ **Resolvido pelo configurador do aparelho**, ver abaixo: TLS é
+   caixa de seleção com porta própria. O custo é nosso (certificado e um
+   segundo listener), não do aparelho. Nasce cifrado.
 
 ## Identidade do aparelho e vínculo com o veículo
 
@@ -239,3 +239,32 @@ o canal de mídia carrega `DSNO`, `STREAMNAME` e `SESSION`.
 O nó de mídia resolve o `DSNO` do mesmo jeito e casa o `SESSION` com a sessão de
 sinalização que está no diretório. `STREAMNAME` identifica cada canal dali em
 diante — e o mesmo TCP pode carregar mais de um.
+
+## O que o configurador do aparelho já entrega de graça
+
+A página *Definição de rede → Definição de servidor* do MDVR de bancada mostra
+três coisas que mudam o plano da fase 1 para melhor.
+
+**TLS é caixa de seleção, com porta separada.** A tela tem `TLS Activar` e, para
+cada servidor, duas portas: uma `TCP` e uma `TLS`. Do lado do aparelho cifrar não
+custa nada — o custo é só nosso, um certificado e um segundo listener. Então não
+há motivo para a fase 1 subir em claro: a frota instalada guarda endereço e porta
+nos parâmetros dela, e mudar isso depois é visita técnica.
+
+**Sinalização e mídia são endereços independentes no aparelho.** Há
+`Endereço do servidor registrado` e `Endereço do servidor de mídia`, cada um com
+seu par de portas. É a confirmação prática do que o `IPANDPORT` faz: o endereço
+gravado é o padrão, e o comando de sinalização sobrepõe quando quer mandar o
+aparelho para outro nó. Os dois caminhos existem porque servem a momentos
+diferentes.
+
+**São dois servidores, não um.** A tela tem `Servidor 1` e `Servidor 2`, e o
+campo `SC` do `CONNECT` — "connect to the server subscript at this time, starting
+from 0" — diz em qual dos dois o aparelho está. Isso é failover que já vem no
+aparelho, sem balanceador e sem custo nosso além de subir o segundo endereço. Na
+fase 1 os dois podem apontar para o mesmo lugar; o dia de separar não exige tocar
+na frota.
+
+Confirmações menores da mesma captura: o tipo de protocolo aparece como `N9M`, e
+o estado de conexão como "Servidor principal está conectado" — o aparelho de
+bancada está falando N9M com algum servidor central agora.
