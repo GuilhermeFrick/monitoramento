@@ -15,7 +15,17 @@ internal/n9m/        o protocolo
   frame.go           cabeçalho de 12 bytes, leitura e escrita
   message.go         envelope JSON, CONNECT, KEEPALIVE
 internal/probe/      o servidor de escuta da sonda
+test/                os testes, separados do código
 tools/watch.py       visualizador ao vivo do log
+```
+
+Os testes ficam em `test/`, fora do pacote que exercitam. Isso não é a convenção
+do Go e tem um preço: só alcançam identificadores exportados, então função
+interna só se testa através de alguma chamada pública que a use. E a cobertura
+precisa de flag explícita:
+
+```bash
+go test ./test/ -coverpkg=./internal/... -cover
 ```
 
 `internal/n9m` não sabe que existe socket e `internal/probe` não sabe decodificar

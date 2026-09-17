@@ -1,4 +1,4 @@
-package n9m
+package test
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"io"
 	"testing"
+
+	"avansat/gate-n9m/internal/n9m"
 )
 
 // realHeader is the 12 bytes an M1N2.0-STANDARD running protocol 1.0.6 sent on
@@ -24,11 +26,11 @@ var realHeader = []byte{
 }
 
 func TestDecodeRealDeviceHeader(t *testing.T) {
-	h, err := DecodeHeader(realHeader)
+	h, err := n9m.DecodeHeader(realHeader)
 	if err != nil {
 		t.Fatalf("the real device's header must be accepted, got error: %v", err)
 	}
-	if h.Type != PayloadCommand {
+	if h.Type != n9m.PayloadCommand {
 		t.Errorf("type = %v, want command", h.Type)
 	}
 	if h.SSRC != 0 {
@@ -50,7 +52,7 @@ func TestDecodeRealDeviceHeader(t *testing.T) {
 func TestRealHeaderIsNotRejectedByVersion(t *testing.T) {
 	body := []byte(`{"MODULE":"CERTIFICATE","OPERATION":"CONNECT"}`)
 
-	frame, err := ReadFrame(frameWithRealHeader(body))
+	frame, err := n9m.ReadFrame(frameWithRealHeader(body))
 	if err != nil {
 		t.Fatalf("a frame from the real device was rejected: %v", err)
 	}
@@ -61,7 +63,7 @@ func TestRealHeaderIsNotRejectedByVersion(t *testing.T) {
 
 func TestPayloadLengthIsBigEndian(t *testing.T) {
 	// 0x000001be read little-endian would be 3187736576, not 446.
-	h, err := DecodeHeader(realHeader)
+	h, err := n9m.DecodeHeader(realHeader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,14 +74,14 @@ func TestPayloadLengthIsBigEndian(t *testing.T) {
 
 func TestOversizedPayloadIsRejected(t *testing.T) {
 	header := append([]byte(nil), realHeader...)
-	binary.BigEndian.PutUint32(header[4:8], MaxPayloadSize+1)
-	if _, err := DecodeHeader(header); err == nil {
+	binary.BigEndian.PutUint32(header[4:8], n9m.MaxPayloadSize+1)
+	if _, err := n9m.DecodeHeader(header); err == nil {
 		t.Fatal("want error: with the version check gone, the size limit is the only guard against lost frame sync")
 	}
 }
 
 func TestShortHeaderIsRejected(t *testing.T) {
-	if _, err := DecodeHeader([]byte{0x08, 0x00}); err == nil {
+	if _, err := n9m.DecodeHeader([]byte{0x08, 0x00}); err == nil {
 		t.Fatal("want error for an incomplete header")
 	}
 }
@@ -91,7 +93,7 @@ func TestTruncatedPayloadIsRejected(t *testing.T) {
 	buf.Write(header)
 	buf.WriteString("but sends only this")
 
-	if _, err := ReadFrame(&buf); err == nil {
+	if _, err := n9m.ReadFrame(&buf); err == nil {
 		t.Fatal("want error for a truncated payload")
 	}
 }
@@ -100,10 +102,10 @@ func TestRoundTrip(t *testing.T) {
 	body := []byte(`{"MODULE":"CERTIFICATE","OPERATION":"KEEPALIVE"}`)
 
 	var buf bytes.Buffer
-	if err := WriteFrame(&buf, PayloadCommand, 0, body); err != nil {
+	if err := n9m.WriteFrame(&buf, n9m.PayloadCommand, 0, body); err != nil {
 		t.Fatalf("writing: %v", err)
 	}
-	frame, err := ReadFrame(&buf)
+	frame, err := n9m.ReadFrame(&buf)
 	if err != nil {
 		t.Fatalf("reading: %v", err)
 	}
@@ -115,7 +117,7 @@ func TestRoundTrip(t *testing.T) {
 // What we write must go out in the device's dialect, not the table's.
 func TestWriteUsesTheDeviceDialect(t *testing.T) {
 	var buf bytes.Buffer
-	if err := WriteFrame(&buf, PayloadCommand, 0, []byte("x")); err != nil {
+	if err := n9m.WriteFrame(&buf, n9m.PayloadCommand, 0, []byte("x")); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.Bytes()
@@ -130,11 +132,11 @@ func TestWriteUsesTheDeviceDialect(t *testing.T) {
 func TestWriteFrameWithMirrorsTheHeader(t *testing.T) {
 	var buf bytes.Buffer
 	reserved := [4]byte{0xAA, 0xBB, 0xCC, 0xDD}
-	if err := WriteFrameWith(&buf, 0x99, reserved, PayloadSpecial, 7, []byte("x")); err != nil {
+	if err := n9m.WriteFrameWith(&buf, 0x99, reserved, n9m.PayloadSpecial, 7, []byte("x")); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.Bytes()
-	if out[0] != 0x99 || out[1] != byte(PayloadSpecial) {
+	if out[0] != 0x99 || out[1] != byte(n9m.PayloadSpecial) {
 		t.Errorf("flags/type = %02x %02x", out[0], out[1])
 	}
 	if binary.BigEndian.Uint16(out[2:4]) != 7 {
@@ -147,22 +149,22 @@ func TestWriteFrameWithMirrorsTheHeader(t *testing.T) {
 
 func TestTwoFramesInSequence(t *testing.T) {
 	var buf bytes.Buffer
-	if err := WriteFrame(&buf, PayloadCommand, 0, []byte("first")); err != nil {
+	if err := n9m.WriteFrame(&buf, n9m.PayloadCommand, 0, []byte("first")); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteFrame(&buf, PayloadSpecial, 7, []byte("second")); err != nil {
+	if err := n9m.WriteFrame(&buf, n9m.PayloadSpecial, 7, []byte("second")); err != nil {
 		t.Fatal(err)
 	}
 
-	one, err := ReadFrame(&buf)
+	one, err := n9m.ReadFrame(&buf)
 	if err != nil || string(one.Payload) != "first" {
 		t.Fatalf("first frame: %q, %v", one.Payload, err)
 	}
-	two, err := ReadFrame(&buf)
+	two, err := n9m.ReadFrame(&buf)
 	if err != nil || string(two.Payload) != "second" || two.Header.SSRC != 7 {
 		t.Fatalf("second frame: %q ssrc=%d, %v", two.Payload, two.Header.SSRC, err)
 	}
-	if _, err := ReadFrame(&buf); err != io.EOF {
+	if _, err := n9m.ReadFrame(&buf); err != io.EOF {
 		t.Errorf("want clean EOF at the end, got %v", err)
 	}
 }
@@ -180,7 +182,7 @@ func TestCompressionIsDetectedBySignature(t *testing.T) {
 	}
 	w.Close()
 
-	frame, err := ReadFrame(frameWithRealHeader(zipped.Bytes()))
+	frame, err := n9m.ReadFrame(frameWithRealHeader(zipped.Bytes()))
 	if err != nil {
 		t.Fatalf("reading: %v", err)
 	}
@@ -199,7 +201,7 @@ func TestCompressionIsDetectedBySignature(t *testing.T) {
 func TestNonGzipPayloadIsUntouched(t *testing.T) {
 	body := []byte{0x1f, 0x00, 0x03, 0xff}
 
-	frame, err := ReadFrame(frameWithRealHeader(body))
+	frame, err := n9m.ReadFrame(frameWithRealHeader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,10 +214,10 @@ func TestNonGzipPayloadIsUntouched(t *testing.T) {
 }
 
 func TestPayloadTypeNames(t *testing.T) {
-	if got := PayloadMaintenance.String(); got != "maintenance" {
+	if got := n9m.PayloadMaintenance.String(); got != "maintenance" {
 		t.Errorf("type 30 = %q", got)
 	}
-	if got := PayloadType(99).String(); got != "unknown(99)" {
+	if got := n9m.PayloadType(99).String(); got != "unknown(99)" {
 		t.Errorf("unknown type = %q", got)
 	}
 }

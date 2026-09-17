@@ -1,4 +1,4 @@
-package probe
+package test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"avansat/gate-n9m/internal/n9m"
+	"avansat/gate-n9m/internal/probe"
 )
 
 // The real device's CONNECT, trimmed to the fields that matter.
@@ -23,7 +24,7 @@ const realConnect = `{"MODULE":"CERTIFICATE","OPERATION":"CONNECT",` +
 
 // start brings up a probe on a free port and returns its address plus whatever
 // it logged, once the returned cleanup has run.
-func start(t *testing.T, cfg Config) (addr string, logged func() string) {
+func start(t *testing.T, cfg probe.Config) (addr string, logged func() string) {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -42,7 +43,7 @@ func start(t *testing.T, cfg Config) (addr string, logged func() string) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := New(cfg, logger).ListenAndServe(ctx); err != nil {
+		if err := probe.New(cfg, logger).ListenAndServe(ctx); err != nil {
 			logger.Printf("serve error: %v", err)
 		}
 	}()
@@ -85,7 +86,7 @@ func waitForListener(t *testing.T, addr string) {
 }
 
 func TestConnectIsAcceptedAndSessionEchoed(t *testing.T) {
-	addr, _ := start(t, Config{Reply: true, MaskCmd: 1})
+	addr, _ := start(t, probe.Config{Reply: true, MaskCmd: 1})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -119,7 +120,7 @@ func TestConnectIsAcceptedAndSessionEchoed(t *testing.T) {
 // The reply has to carry the device's own flags byte and RESERVE back, not the
 // values from the spec table.
 func TestReplyMirrorsTheDeviceHeader(t *testing.T) {
-	addr, _ := start(t, Config{Reply: true})
+	addr, _ := start(t, probe.Config{Reply: true})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -146,7 +147,7 @@ func TestReplyMirrorsTheDeviceHeader(t *testing.T) {
 }
 
 func TestKeepAliveIsEchoed(t *testing.T) {
-	addr, _ := start(t, Config{Reply: true})
+	addr, _ := start(t, probe.Config{Reply: true})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -179,7 +180,7 @@ func TestKeepAliveIsEchoed(t *testing.T) {
 // Without -reply the probe stays silent on purpose: it observes the CONNECT and
 // the device's retry behavior without making it act.
 func TestSilentModeAnswersNothing(t *testing.T) {
-	addr, logged := start(t, Config{Reply: false})
+	addr, logged := start(t, probe.Config{Reply: false})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -204,7 +205,7 @@ func TestSilentModeAnswersNothing(t *testing.T) {
 // down quietly — the leftover bytes are the most valuable thing the probe
 // produces, so they have to reach the log.
 func TestBrokenFramingDumpsWhatIsLeft(t *testing.T) {
-	addr, logged := start(t, Config{Reply: true})
+	addr, logged := start(t, probe.Config{Reply: true})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -229,7 +230,7 @@ func TestBrokenFramingDumpsWhatIsLeft(t *testing.T) {
 // Binary payloads (the GPS special report) must be reported by size, not fed to
 // the JSON parser.
 func TestBinaryPayloadIsReportedNotParsed(t *testing.T) {
-	addr, logged := start(t, Config{Reply: true})
+	addr, logged := start(t, probe.Config{Reply: true})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -257,7 +258,7 @@ func TestBinaryPayloadIsReportedNotParsed(t *testing.T) {
 // the bytes exactly as they arrived, header included.
 func TestCaptureKeepsRawBytes(t *testing.T) {
 	dir := t.TempDir()
-	addr, _ := start(t, Config{Reply: true, CaptureDir: dir})
+	addr, _ := start(t, probe.Config{Reply: true, CaptureDir: dir})
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -295,7 +296,7 @@ func TestCaptureKeepsRawBytes(t *testing.T) {
 }
 
 func TestLocalAddressesSkipsLoopback(t *testing.T) {
-	for _, addr := range LocalAddresses() {
+	for _, addr := range probe.LocalAddresses() {
 		if strings.HasPrefix(addr, "127.") {
 			t.Errorf("loopback %s should not be offered as a device target", addr)
 		}

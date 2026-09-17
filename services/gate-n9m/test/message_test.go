@@ -1,8 +1,10 @@
-package n9m
+package test
 
 import (
 	"encoding/json"
 	"testing"
+
+	"avansat/gate-n9m/internal/n9m"
 )
 
 // Some payloads arrive with a NUL byte in front of the JSON — seen on a
@@ -11,10 +13,10 @@ import (
 func TestNulPrefixedJSONIsParsed(t *testing.T) {
 	payload := append([]byte{0x00}, []byte(`{"MODULE":"DEVEMM","OPERATION":"SPI"}`)...)
 
-	if !LooksLikeJSON(payload) {
+	if !n9m.LooksLikeJSON(payload) {
 		t.Fatal("a NUL-prefixed payload must still be recognized as JSON")
 	}
-	msg, _, err := ParseMessage(payload)
+	msg, _, err := n9m.ParseMessage(payload)
 	if err != nil {
 		t.Fatalf("parsing: %v", err)
 	}
@@ -25,13 +27,13 @@ func TestNulPrefixedJSONIsParsed(t *testing.T) {
 
 func TestBinaryPayloadIsNotMistakenForJSON(t *testing.T) {
 	// The GPS special report (payload type 22) starts like this.
-	if LooksLikeJSON([]byte{0x02, 0x01, 0x01, 0x00, 0x00}) {
+	if n9m.LooksLikeJSON([]byte{0x02, 0x01, 0x01, 0x00, 0x00}) {
 		t.Error("binary payload was taken for JSON")
 	}
 }
 
 func TestEmptyPayloadIsNotJSON(t *testing.T) {
-	if LooksLikeJSON(nil) {
+	if n9m.LooksLikeJSON(nil) {
 		t.Error("an empty payload is not JSON")
 	}
 }
@@ -44,11 +46,11 @@ func TestDecodeConnectFromRealPayload(t *testing.T) {
 	   "DEVNAME":"M1N2.0-STANDARD","DSNO":"00E400689E","ENCRYPTTYPE":0,
 	   "ETLS":0,"EV":"V2.0","NET":1,"PV":1,"SC":0,"UNAME":"","UNO":""}}`)
 
-	msg, _, err := ParseMessage(payload)
+	msg, _, err := n9m.ParseMessage(payload)
 	if err != nil {
 		t.Fatalf("parsing: %v", err)
 	}
-	params, err := DecodeConnect(msg)
+	params, err := n9m.DecodeConnect(msg)
 	if err != nil {
 		t.Fatalf("decoding CONNECT: %v", err)
 	}
@@ -70,18 +72,18 @@ func TestDecodeConnectFromRealPayload(t *testing.T) {
 }
 
 func TestDecodeConnectWithoutParameterIsNotAnError(t *testing.T) {
-	msg, _, err := ParseMessage([]byte(`{"MODULE":"CERTIFICATE","OPERATION":"KEEPALIVE"}`))
+	msg, _, err := n9m.ParseMessage([]byte(`{"MODULE":"CERTIFICATE","OPERATION":"KEEPALIVE"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeConnect(msg); err != nil {
+	if _, err := n9m.DecodeConnect(msg); err != nil {
 		t.Errorf("a message with no PARAMETER should decode to the zero value, got %v", err)
 	}
 }
 
 func TestConnectAcceptedShape(t *testing.T) {
 	var got map[string]any
-	if err := json.Unmarshal(ConnectAccepted("SESSION-1", 1), &got); err != nil {
+	if err := json.Unmarshal(n9m.ConnectAccepted("SESSION-1", 1), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got["SESSION"] != "SESSION-1" {
@@ -98,7 +100,7 @@ func TestConnectAcceptedShape(t *testing.T) {
 
 func TestConnectRejectedCarriesTheCause(t *testing.T) {
 	var got map[string]any
-	if err := json.Unmarshal(ConnectRejected("S", 5, "NOT REGISTERED"), &got); err != nil {
+	if err := json.Unmarshal(n9m.ConnectRejected("S", 5, "NOT REGISTERED"), &got); err != nil {
 		t.Fatal(err)
 	}
 	response := got["RESPONSE"].(map[string]any)
@@ -110,13 +112,13 @@ func TestConnectRejectedCarriesTheCause(t *testing.T) {
 // Chapter 03 defines the heartbeat reply as the same JSON with no RESPONSE.
 func TestKeepAliveEchoHasNoResponse(t *testing.T) {
 	var got map[string]any
-	if err := json.Unmarshal(KeepAliveEcho("SESSION-1"), &got); err != nil {
+	if err := json.Unmarshal(n9m.KeepAliveEcho("SESSION-1"), &got); err != nil {
 		t.Fatal(err)
 	}
 	if _, present := got["RESPONSE"]; present {
 		t.Error("the keepalive echo must not carry a RESPONSE object")
 	}
-	if got["OPERATION"] != OpKeepAlive || got["SESSION"] != "SESSION-1" {
+	if got["OPERATION"] != n9m.OpKeepAlive || got["SESSION"] != "SESSION-1" {
 		t.Errorf("got %v", got)
 	}
 }
