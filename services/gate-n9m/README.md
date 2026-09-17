@@ -36,8 +36,19 @@ comportamento de sonda, que é o oposto do que o gate precisa fazer.
 
 ```bash
 go run ./cmd/probe -addr :7001 -reply -capture ./captures
-./tools/watch.py /caminho/do/log      # visão legível, uma linha por mensagem
+./tools/watch.py /caminho/do/log            # uma linha por mensagem
+./tools/watch.py -v /caminho/do/log         # com o payload inteiro embaixo
+./tools/watch.py -f PANIC /caminho/do/log   # só o que contiver esse texto
+cat /caminho/do/log | ./tools/watch.py      # reprocessa um log já gravado
 ```
+
+O payload cru fica gravado em três níveis, do mais fiel ao mais legível:
+
+| Onde | O quê |
+|---|---|
+| `./captures/*.bin` | bytes exatos do fio, cabeçalho incluído |
+| o log da sonda | um JSON completo por mensagem, já desenquadrado |
+| `watch.py` | resumo de uma linha, ou o payload inteiro com `-v` |
 
 | Flag | Efeito |
 |---|---|

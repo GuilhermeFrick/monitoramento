@@ -11,6 +11,7 @@ Marca com `histórico` toda mensagem cujo TIME é muito mais velho que a chegada
 É o comportamento de despejo ao reconectar, e vê-lo acontecendo ao vivo explica
 mais do que qualquer documento.
 """
+import argparse
 import json
 import os
 import re
@@ -18,7 +19,9 @@ import sys
 import time
 from datetime import datetime
 
-ATRASO_HISTORICO = 300  # segundos entre o evento e a chegada para chamar de histórico
+ATRASO_HISTORICO = 300  # segundos
+COMPLETO = False
+FILTRO = ""  # segundos entre o evento e a chegada para chamar de histórico
 
 CORES = {
     "conexao": "\033[1;36m",
@@ -70,11 +73,14 @@ def descrever(d):
         return "entradas", f"ACC={acc} {local}"
 
     if op == "UPDATEIOSTATUSINFO":
-        entradas = d.get("PARAMETER", {}).get("IO", [])
-        ativas = [e.get("NAME", e.get("NSER", "?")) for e in entradas if e.get("S")]
-        if not ativas:
-            return "sensores", f"{len(entradas)} entradas, nenhuma ativa"
-        return "sensores", f"{len(entradas)} entradas · ativas: " + ", ".join(ativas)
+        p = d.get("PARAMETER", {})
+        entradas = p.get("IO", [])
+        # U é o código de "Sensor Uses" da tela de configuração: 0 nenhum,
+        # 1 alarme de urgência (pânico), 8/11/14 portas 1/2/3.
+        ativas = [f"{e.get('NAME', e.get('NSER','?'))}" for e in entradas if e.get("S")]
+        seq = f" seq={p['SERIAL']}" if "SERIAL" in p else ""
+        estado = ", ".join(ativas) if ativas else "nenhuma ativa"
+        return "sensores", f"{len(entradas)} entradas · {estado}{seq}"
 
     if op == "DEVINFOCHANGEUPLOAD":
         p = d.get("PARAMETER", {})
@@ -128,11 +134,20 @@ def seguir(caminho):
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Visualiza o log da sonda N9M.")
     # Sem argumento, ou com "-", lê da entrada padrão. Serve para acompanhar ao
     # vivo (`tail -f log | watch.py`) e para reprocessar um log inteiro
     # (`cat log | watch.py`), que é como se confere a formatação sem depender
     # de o aparelho falar naquele instante.
-    alvo = sys.argv[1] if len(sys.argv) > 1 else "-"
+    ap.add_argument("alvo", nargs="?", default="-", help="arquivo de log, ou - para a entrada padrão")
+    ap.add_argument("-v", "--full", action="store_true",
+                    help="imprime o payload inteiro embaixo de cada linha, em vez do resumo")
+    ap.add_argument("-f", "--filtro", default="",
+                    help="só mostra mensagens cujo payload contenha este texto")
+    args = ap.parse_args()
+    global COMPLETO, FILTRO
+    COMPLETO, FILTRO = args.full, args.filtro
+    alvo = args.alvo
     if alvo == "-":
         origem = sys.stdin
         print("lendo da entrada padrão\n", flush=True)
@@ -181,9 +196,15 @@ def main():
             dias = idade / 86400
             marca = cor("historico", f"  ← histórico de {dias:.1f}d atrás" if dias >= 1 else f"  ← histórico de {idade/3600:.1f}h atrás")
 
+        if FILTRO and FILTRO not in m.group(0):
+            continue
+
         seta = cor("apagado", "→") if enviado else " "
         pintar = cor("saude", rotulo) if rotulo == "saúde" else rotulo
         print(f"{agora} {seta} {pintar:<13} {detalhe}{marca}", flush=True)
+        if COMPLETO:
+            for linha_json in json.dumps(d, indent=2, ensure_ascii=False).splitlines():
+                print(cor("apagado", f"                {linha_json}"), flush=True)
 
 
 if __name__ == "__main__":
