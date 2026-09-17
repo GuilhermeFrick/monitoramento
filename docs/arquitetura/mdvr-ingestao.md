@@ -211,33 +211,101 @@ que nenhuma tela saiba da troca.
 
 ## Linguagem
 
-A resposta honesta não é "tudo em Go".
+**Toda a borda de dispositivo em Go. Todo o resto em TypeScript.**
 
-**Sinalização fica em TypeScript.** O perfil é muitas conexões ociosas com
-mensagem pequena e esporádica — keepalive, posição a cada N segundos, alarme
-ocasional. É exatamente onde libuv se sai bem. Além disso o código existe, está
-testado, e compartilha o codec com o app. Reescrever em Go duplicaria o codec e
-jogaria fora trabalho verificado para ganhar num eixo que não é o gargalo.
+### Por que não o meio-termo
 
-**Mídia em Go, quando escalar.** Aqui a linguagem muda o número de verdade: o
-trabalho é copiar bytes de milhares de sockets para milhares de sockets, com
-pouco processamento por byte. Em Node cada pedaço atravessa a fronteira
-JS/C++ e vira Buffer, o que gera pressão de coletor exatamente no pico. Em Go,
-goroutine por conexão com `io.CopyBuffer` sobre pool, e no Linux `splice` para
-não passar pelo espaço de usuário. Rust seria melhor ainda e custa mais time.
+A primeira versão deste documento recomendava sinalização em TypeScript e só a
+mídia em Go. Estava errado, por dois motivos.
 
-**O resto em TypeScript**, compartilhando `@avansat/contratos` com o front.
+O primeiro é que o argumento a favor do TS era de **adequação, não de
+vantagem**: "Node dá conta desse perfil". Dar conta não justifica uma fronteira
+de linguagem. Fronteira se paga com custo diário de quem mantém, e só vale
+quando o outro lado ganha algo que compense.
 
-Ou seja: **um serviço em Go, o resto em TS** — e mesmo esse um só quando a conta
-pedir.
+O segundo é pior: aquela fronteira ficava no lugar errado. Sinalização e mídia
+são **fortemente acopladas** — o gate de sinalização escolhe o nó de mídia,
+entrega o endereço, recebe as notificações de início e fim de sessão e mantém o
+diretório. Duas linguagens atravessando um acoplamento desses é exatamente onde
+a salada dói.
+
+### O argumento dos 10 segundos vira o contrário
+
+Se a sinalização troca mensagem a cada 10 segundos, o processamento é
+irrelevante. O que sobra como custo dominante é **segurar a conexão** — e é
+justamente aí que Go ganha: uma goroutine ociosa custa alguns KB de pilha,
+enquanto em Node cada socket carrega objeto, closures e pressão de coletor.
+
+Ou seja, quanto mais leve for a mensagem, mais o peso migra para onde o Node é
+pior. O argumento de que "é pouca coisa" reforça o Go, não o contrário.
+
+### O custo real, medido
+
+O que se perde é menor do que parecia:
+
+| | Linhas |
+|---|---|
+| Codec que passaria a existir duas vezes | ~280 |
+| Servidor N9M a reescrever | 464 |
+| Sessão do app, que **nunca** foi compartilhável | 548 |
+
+As 548 linhas de sessão não são perda: o app autentica **no** aparelho e o
+servidor autentica **o** aparelho. São papéis opostos, e nunca foram o mesmo
+código. O que de fato se compartilha hoje são os ~280 do codec.
+
+Duplicar 280 linhas de codec é barato, e tem mitigação conhecida: **vetores de
+teste dourados**. Um arquivo de casos em hexadecimal, e as duas implementações
+obrigadas a codificar e decodificar igual. Isso transforma a duplicação de risco
+em invariante verificada — e chega a ser melhor que a implementação única, onde
+um erro de framing fica invisível porque os dois lados erram junto.
+
+### O que Go ganha aqui
+
+- Binário único, sem `node_modules` na borda;
+- memória previsível por conexão, com milhares delas abertas;
+- sem cauda de pausa de coletor no pico, que é quando mais importa;
+- `splice` no Linux para a mídia não passar pelo espaço de usuário;
+- uma linguagem só onde o acoplamento é maior.
+
+### Onde fica a fronteira
+
+Na mesma linha que o contrato neutro de dispositivo já desenha:
+
+```
+  Go  │  gate-n9m · gate-midia-n9m · gate-<outra família>
+ ─────┼──────────── contrato neutro de dispositivo ────────────
+  TS  │  enriquecimento · ingestão · api · workers · front
+```
+
+Isso não é salada, é o contrário: **a fronteira de linguagem coincide com uma
+fronteira de contrato que teria de existir de qualquer jeito**, pela regra de
+neutralidade de fabricante. Salada é quando as fronteiras são arbitrárias e se
+cruzam; aqui há uma só, e ela já estava no desenho.
+
+Do lado de cá ela continua TypeScript por um motivo concreto: enriquecimento,
+API e workers compartilham `@avansat/contratos` com o front, no mesmo pacote e
+nos mesmos tipos. Levar esses serviços para Go criaria uma segunda fronteira,
+essa sim arbitrária, e obrigaria a gerar tipos para o front a partir de outra
+fonte.
+
+### O que a borda em Go não deve fazer
+
+Nada de negócio. Ela traduz protocolo para contrato e contrato para protocolo, e
+para por aí. Resolver aparelho → veículo → cliente é cadastro e fica do lado de
+TypeScript, junto do resto do domínio.
 
 ## Não fazer over-engineering agora
 
 ### Fase 1, o que dá para fazer já
 
-Um processo de sinalização e um de mídia, ambos em TypeScript, sink no Postgres
-e no ClickHouse. O `gate-n9m` entrega sempre o mesmo endereço de mídia, porque
-só existe um nó.
+Um processo de sinalização e um de mídia, ambos em Go, publicando no contrato
+neutro. Do outro lado da fronteira, enriquecimento e ingestão em TypeScript,
+gravando em Postgres e ClickHouse. O gate entrega sempre o mesmo endereço de
+mídia, porque só existe um nó.
+
+O nó de mídia pode começar como repasse simples, sem `splice` nem pool — a
+otimização entra quando a medição pedir. O que importa agora é ele já nascer em
+Go, para não haver reescrita de linguagem no meio do caminho.
 
 O que **não** pode ser adiado, porque é caro de retrofitar:
 
@@ -257,8 +325,8 @@ O sinal de que chegou a hora é medível, não é opinião: latência de repasse
 mídia subindo no percentil 95, ou pausa de coletor aparecendo no perfil do
 processo de mídia.
 
-- o nó de mídia reescrito em Go, atrás do mesmo diretório;
-- vários nós, com o gate de sinalização escolhendo por carga e região;
+- vários nós de mídia, com o gate de sinalização escolhendo por carga e região;
+- repasse com `splice` e pool de buffers no nó de mídia;
 - sinalização horizontal atrás de um balanceador L4 simples — não precisa de
   afinidade, porque o aparelho reconecta e se reapresenta.
 
