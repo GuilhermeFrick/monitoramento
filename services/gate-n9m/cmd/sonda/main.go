@@ -110,21 +110,18 @@ func atender(conexao net.Conn) {
 	for {
 		quadro, err := n9m.LerQuadro(leitor)
 		if err != nil {
-			switch {
-			case err == io.EOF:
+			if err == io.EOF {
 				marca("aparelho fechou a conexão depois de %d quadros", quadros)
-			case err == n9m.ErroVersao:
-				marca("ERRO %v — os primeiros bytes do que sobrou:", err)
+			} else {
+				marca("ERRO %v (depois de %d quadros) — os primeiros bytes do que sobrou:", err, quadros)
 				despejar(leitor, marca)
-			default:
-				marca("ERRO %v (depois de %d quadros)", err, quadros)
 			}
 			return
 		}
 		quadros++
 		marca("← %s", quadro.Cabecalho)
-		if len(quadro.Csrc) > 0 {
-			marca("    csrc %s", hex.EncodeToString(quadro.Csrc))
+		if quadro.Comprimido {
+			marca("    veio comprimido: %dB no fio, %dB abertos", len(quadro.Bruto), len(quadro.Payload))
 		}
 		tratar(conexao, quadro, marca)
 	}
@@ -145,11 +142,6 @@ func tratar(conexao net.Conn, quadro *n9m.Quadro, marca func(string, ...any)) {
 		if n := len(quadro.Payload); n > 0 {
 			marca("    %d bytes binários, começando com %s", n, hex.EncodeToString(quadro.Payload[:min(16, n)]))
 		}
-		return
-	}
-
-	if quadro.Cabecalho.Cifrado {
-		marca("    payload cifrado, não dá para ler sem a chave")
 		return
 	}
 
@@ -176,7 +168,7 @@ func tratar(conexao net.Conn, quadro *n9m.Quadro, marca func(string, ...any)) {
 				"MASKCMD":    1,
 			},
 		})
-		responderCom(conexao, corpo, marca)
+		responderCom(conexao, quadro.Cabecalho, corpo, marca)
 	case "KEEPALIVE":
 		// O protocolo pede o mesmo JSON de volta, sem RESPONSE.
 		corpo, _ := json.Marshal(map[string]any{
@@ -184,12 +176,15 @@ func tratar(conexao net.Conn, quadro *n9m.Quadro, marca func(string, ...any)) {
 			"OPERATION": "KEEPALIVE",
 			"SESSION":   c.Session,
 		})
-		responderCom(conexao, corpo, marca)
+		responderCom(conexao, quadro.Cabecalho, corpo, marca)
 	}
 }
 
-func responderCom(conexao net.Conn, corpo []byte, marca func(string, ...any)) {
-	if err := n9m.EscreverQuadro(conexao, n9m.TipoComando, 0, corpo); err != nil {
+// responderCom espelha o byte de flags e o RESERVE que chegaram, em vez de usar
+// os valores da tabela. O aparelho é quem decide se aceita a resposta, então
+// falar o dialeto dele é mais seguro do que insistir na documentação.
+func responderCom(conexao net.Conn, recebido n9m.Cabecalho, corpo []byte, marca func(string, ...any)) {
+	if err := n9m.EscreverQuadroCom(conexao, recebido.Bruto0, recebido.Reserva, n9m.TipoComando, 0, corpo); err != nil {
 		marca("    → falhou ao responder: %v", err)
 		return
 	}
