@@ -23,6 +23,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -137,8 +138,11 @@ type comando struct {
 }
 
 func tratar(conexao net.Conn, quadro *n9m.Quadro, marca func(string, ...any)) {
-	if quadro.Cabecalho.Tipo != n9m.TipoComando {
-		// Mídia e afins: só o tamanho interessa agora, o conteúdo é binário.
+	// O tipo do cabeçalho não decide se dá para ler: o tipo 30, que a
+	// documentação chama de "streamax maintain data, not opensourced", chega
+	// como JSON puro e é a maior parte do tráfego. Então quem decide é o
+	// primeiro byte do payload, não a tabela.
+	if !bytes.HasPrefix(bytes.TrimLeft(quadro.Payload, " \t\r\n"), []byte("{")) {
 		if n := len(quadro.Payload); n > 0 {
 			marca("    %d bytes binários, começando com %s", n, hex.EncodeToString(quadro.Payload[:min(16, n)]))
 		}
