@@ -122,3 +122,120 @@ protocolo de baixa latência até o navegador: fica para depois da medição.
 3. **TLS.** O N9M não obriga. Decidir se a sinalização sobe em TCP puro na fase
    1 e ganha TLS depois, ou já nasce cifrada — a segunda opção custa pouco
    agora e muito depois, quando houver frota instalada com endereço gravado.
+
+## Identidade do aparelho e vínculo com o veículo
+
+### O `DSNO` é a identidade, e é a única coisa que não se digita
+
+> `DSNO` — "The device serial number. It is used for vehicle management. The
+> value is encrypted chip number. Each N9M host has different chip numbers and
+> the chip number is the unique identifier for the device."
+> — capítulo 03, *Connection_Command*
+
+Vem no `CONNECT`, tem de 1 a 32 bytes, e na prática são 10 caracteres hex:
+`007102037B` no aparelho que temos em bancada, `00B5000053` e `00600052B8` nos
+exemplos da documentação.
+
+A página *Informações de registro* do configurador do aparelho confirma isso de
+um jeito que nenhum documento confirmaria. Dos campos daquela tela, **um só não
+é editável**:
+
+| Campo na tela | Editável | Campo no protocolo |
+|---|---|---|
+| Número de série de fábrica | **não**, vem do chip | `DSNO` |
+| Auto-numeração de dispositivo | sim | `AUTONO` |
+| Número de matrícula | sim | `AUTOCAR` |
+| Placa do veículo | sim | `CARNUM` |
+| Número VIN do veículo | sim | — |
+| Identificação do motorista | sim | `UNO` |
+| Nome do motorista | sim | `UNAME` |
+
+Placa e VIN chegam no pacote, mas são texto que alguém digitou na instalação.
+Estão errados com a mesma facilidade com que estão certos, e ninguém percebe até
+o dia em que dois aparelhos anunciam a mesma placa. **Não são vínculo, são
+declaração.**
+
+### O `SESSIONID` não é identidade
+
+É o aparelho quem gera o `SESSIONID`, não nós, e ele vale por conexão:
+
+> "The device generates `SESSIONID` which is a unique global descriptor."
+> — capítulo 03
+
+Serve para amarrar os pacotes de uma mesma conexão, inclusive a de mídia. Nada
+durável se guarda por ele: reconectou, é outro. Quem persiste é o `DSNO`.
+
+### O protocolo obriga cadastrar antes
+
+Isso não é escolha de arquitetura, está escrito no fluxo de autenticação:
+
+> "If the central server database includes the device, then the response is
+> successful... If the central server database doesn't include the device, then
+> the error code needs to be returned and the link be disconnected."
+> — capítulo 03
+
+Ou seja: aparelho desconhecido **tem** que ser recusado e desconectado. O
+cadastro vem primeiro, sempre. A janela toda de autenticação é de 15 segundos.
+
+**Mas recusar não é a mesma coisa que ignorar.** Um `DSNO` desconhecido batendo
+na porta é exatamente o sinal de um aparelho que foi instalado e não foi
+cadastrado — e é o único momento em que descobrimos isso sozinhos. O gate recusa
+a conexão como manda o protocolo, e grava a tentativa numa fila de
+**aguardando cadastro**, com serial, placa declarada, tipo e horário. Quem for
+cadastrar acha o aparelho esperando em vez de digitar dez caracteres hex de um
+adesivo.
+
+### O vínculo é tabela nossa, não dado do pacote
+
+```
+dispositivo(id, dsno, cliente_id, veiculo_id, ...)   ← Postgres, nosso cadastro
+```
+
+O aparelho diz quem ele é; **nós** dizemos de quem ele é e em que veículo está.
+Trocar o equipamento de veículo é `UPDATE` no nosso cadastro, não visita ao
+configurador.
+
+A placa que chega no `CONNECT` ganha então o papel certo: **conferência**. Se o
+aparelho anuncia `ABC1D23` e o cadastro diz outra coisa, isso não derruba a
+conexão — vira alerta de divergência. É como se descobre que um equipamento foi
+remanejado de veículo sem ninguém avisar o cadastro, que é uma das formas mais
+comuns de a frota e o sistema saírem de sincronia.
+
+### O `DSNO` para na fronteira
+
+Pela regra que governa a ingestão, o contrato neutro **não** carrega `DSNO`.
+`DSNO` é formato da Streamax; outra família de aparelho vai identificar por IMEI,
+por ICCID ou por qualquer outra coisa. O gate resolve `DSNO → dispositivo.id` na
+autenticação e, daí para dentro, todo mundo fala o nosso id.
+
+```
+CONNECT com DSNO:007102037B
+   │
+   ▼  gate-n9m: consulta cadastro, recusa se não achar
+dispositivo.id = 4f2a…        ← a partir daqui ninguém mais viu um DSNO
+   │
+   ▼  contrato neutro → enriquecimento → ingestão → API → front
+```
+
+Sem isso, o dia da segunda família de aparelho é o dia em que `dsno` aparece em
+consulta de ClickHouse, em coluna de Postgres e em componente de React.
+
+### Como a conexão ganha identificador, dos dois lados
+
+**Sinalização.** Chega socket anônimo, chega `CONNECT` com `DSNO` dentro dos 15
+segundos. O gate resolve no cadastro e passa a guardar `conexão → dispositivo.id`
+em memória, além de publicar `dispositivo.id → este nó` no diretório em Redis.
+Sem `CONNECT` válido na janela, derruba.
+
+**Mídia.** Mesmo problema, resolvido pelo mesmo campo: o `CREATESTREAM` que abre
+o canal de mídia carrega `DSNO`, `STREAMNAME` e `SESSION`.
+
+```json
+{ "MODULE": "CERTIFICATE", "OPERATION": "CREATESTREAM",
+  "PARAMETER": { "DSNO": "00B5000053", "STREAMNAME": "4-500", "VISION": "1.0.4" },
+  "SESSION": "0000001008206F2F212156B31CF66AA2" }
+```
+
+O nó de mídia resolve o `DSNO` do mesmo jeito e casa o `SESSION` com a sessão de
+sinalização que está no diretório. `STREAMNAME` identifica cada canal dali em
+diante — e o mesmo TCP pode carregar mais de um.
