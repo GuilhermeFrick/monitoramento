@@ -69,6 +69,13 @@ def descrever(d):
             local = f"{lat},{lon} {pos.get('S', 0)}km/h"
         return "entradas", f"ACC={acc} {local}"
 
+    if op == "UPDATEIOSTATUSINFO":
+        entradas = d.get("PARAMETER", {}).get("IO", [])
+        ativas = [e.get("NAME", e.get("NSER", "?")) for e in entradas if e.get("S")]
+        if not ativas:
+            return "sensores", f"{len(entradas)} entradas, nenhuma ativa"
+        return "sensores", f"{len(entradas)} entradas · ativas: " + ", ".join(ativas)
+
     if op == "DEVINFOCHANGEUPLOAD":
         p = d.get("PARAMETER", {})
         if "WLM" in p:
@@ -121,21 +128,39 @@ def seguir(caminho):
 
 
 def main():
-    caminho = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sonda.log"
-    print(f"acompanhando {caminho} — ctrl-c para sair\n", flush=True)
+    # Sem argumento, ou com "-", lê da entrada padrão. Serve para acompanhar ao
+    # vivo (`tail -f log | watch.py`) e para reprocessar um log inteiro
+    # (`cat log | watch.py`), que é como se confere a formatação sem depender
+    # de o aparelho falar naquele instante.
+    alvo = sys.argv[1] if len(sys.argv) > 1 else "-"
+    if alvo == "-":
+        origem = sys.stdin
+        print("lendo da entrada padrão\n", flush=True)
+    else:
+        origem = seguir(alvo)
+        print(f"acompanhando {alvo} — ctrl-c para sair\n", flush=True)
 
-    for linha in seguir(caminho):
+    for linha in origem:
         agora = datetime.now().strftime("%H:%M:%S")
 
-        if "conectou de" in linha:
+        # O log da sonda é em inglês; as strings abaixo acompanham probe.go.
+        if "connected from" in linha:
             print(cor("conexao", f"{agora}  ── conexão aberta ──"), flush=True)
             continue
-        if "fechou a conexão" in linha or "ERRO" in linha:
+        # "ERROR " com espaço, ancorado no início da mensagem: a resposta de
+        # sucesso do CONNECT carrega "ERRORCAUSE":"SUCCESS" e casava com uma
+        # busca solta por "ERROR".
+        if "closed the connection" in linha or re.search(r"\]\s+ERROR ", linha):
             print(cor("erro", f"{agora}  {linha.split('] ', 1)[-1].rstrip()}"), flush=True)
             continue
-        if "bytes binários" in linha:
-            m = re.search(r"(\d+) bytes binários", linha)
-            print(f"{agora}  {'gps':<13} {cor('apagado', m.group(1) + ' bytes binários')}", flush=True)
+        if (m := re.search(r"\bgps (.+)$", linha.rstrip())) and "extended" not in linha:
+            texto = m.group(1)
+            estilo = "historico" if "backlog" in texto else "saude" if "km/h" in texto else "apagado"
+            print(f"{agora}  {'gps':<13} {cor(estilo, texto)}", flush=True)
+            continue
+        if "gps extended" in linha or "binary bytes" in linha:
+            m = re.search(r"(\d+) (?:binary bytes|bytes)", linha)
+            print(f"{agora}  {'binário':<13} {cor('apagado', (m.group(1) if m else '?') + ' bytes')}", flush=True)
             continue
 
         m = re.search(r"\{.*\}\s*$", linha.strip())
@@ -146,7 +171,7 @@ def main():
         except json.JSONDecodeError:
             continue
 
-        enviado = "    →" in linha
+        enviado = "    ->" in linha or "    →" in linha
         rotulo, detalhe = descrever(d)
 
         # Mensagem cujo evento é bem mais velho que a chegada veio do despejo
@@ -166,3 +191,6 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print()
+    except BrokenPipeError:
+        # Sai quieto quando quem lê fecha o pipe, como `| head`.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
