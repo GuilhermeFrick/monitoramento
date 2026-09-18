@@ -8,33 +8,74 @@ exceção: a consulta de lista de arquivos é `STORM`.
 
 ## Três caminhos independentes para vídeo ao vivo
 
-Isto é o achado que muda o plano de teste. O aparelho não oferece um caminho,
-oferece três, e eles não dependem um do outro.
-
-| Caminho | Transporte | Onde serve | Custo de testar |
+| Caminho | Transporte | Canais por conexão | Serve para |
 |---|---|---|---|
-| Canal de mídia N9M | TCP, endereço via `IPANDPORT` | produção, veículo em campo | alto: exige o nó de mídia escrito |
-| **RTSP do aparelho** | TCP 554 | bancada e rede local | **baixo: `ffplay` e pronto** |
-| WebSocket do portal | HTTP 8000 | o configurador do próprio aparelho | médio: player em WASM |
+| Canal de mídia N9M | TCP, endereço via `IPANDPORT` | vários | produção, veículo em campo |
+| **WebSocket do aparelho** | HTTP 80, upgrade | **todos** | **bancada e rede local** |
+| RTSP do aparelho | TCP 554 | **um por sessão** | inspeção pontual |
 
-**O aparelho roda um servidor RTSP LIVE555 na porta 554.** Descoberto varrendo
-portas: responde `OPTIONS`, `DESCRIBE`, `SETUP`, `PLAY`, `PAUSE`, `TEARDOWN`,
-com autenticação Digest em `realm="LIVE555 Streaming Media"`.
+**O RTSP não serve para parede de câmeras.** Ele existe — LIVE555 na 554, com
+Digest, e as credenciais do configurador funcionam nele — mas entrega um canal
+por sessão. Seis câmeras seriam seis sessões.
 
-As credenciais do configurador funcionam nele — com `admin:Avs01472` a resposta
-sai de `401 Unauthorized` para `404 Stream Not Found`, o que prova que a
-autenticação passou e só falta o caminho do stream.
+### O WebSocket, que é o caminho
 
-⚠️ **O caminho do stream ainda não é conhecido.** Tentados sem sucesso: `/`,
-`/live`, `/0`, `/1`, `/ch0`, `/ch1`, `/channel1`, `/stream0`, `/stream1`,
-`/main`, `/live/ch1`, `/cam/realmonitor`. O jeito de descobrir sem adivinhar é
-por telnet no aparelho, olhando a configuração do LIVE555 — ver
-[prompt-acesso-ao-mdvr.md](../prompt-acesso-ao-mdvr.md).
+```
+ws://<ip>/websocket/preview?chnmask=<mascara>&streamType=<0|1>&iframe=<0|1>
+```
 
-**A porta 8000 é HTTP** e devolve 404 na raiz. É por onde o portal do aparelho
-sobe o vídeo: o log do configurador mostra `[WASMPlayer] create websocket
-chnmask:31` seguido de `[Websocket] websocket ok`. O `chnmask` é a mesma máscara
-de bits do campo `CHANNEL` do N9M — 31 é `0b11111`, canais 1 a 5.
+Veio do app do motorista, em `packages/mdvr-sdk`, e foi confirmado contra o
+aparelho de bancada: **1154 mensagens em 8 segundos, 180 KiB/s, seis canais numa
+conexão só.**
+
+⚠️ **O `streamType` está invertido em relação ao N9M.** Aqui `MAIN` é `0` e `SUB`
+é `1`; no capítulo 15 o `STREAMTYPE` 0 é sub-stream e 1 é principal. Os dois
+valores existem nos dois lugares com significados trocados, e não há nada no
+nome que avise.
+
+**Exige cookie de sessão** do configurador. Sem ele o upgrade é recusado.
+
+**Uma sessão por vez.** Enquanto houver outra aberta — inclusive a aba de
+Antevisão do configurador esquecida num navegador — a resposta é `502 Bad
+Gateway`, não um erro que se pareça com "ocupado".
+
+### O formato dentro do WebSocket
+
+Não é o enquadramento de 12 bytes do N9M. Cada mensagem WebSocket é um pedaço
+de **um** canal:
+
+```
+byte 0     número do canal, 0 a 5 com chnmask=63
+bytes 1-3  marcador ASCII: "2dc" quadro-chave, "3dc" e "4dc" os demais
+bytes 4-5  tamanho, little endian
+resto      H.264 em Annex-B: SPS 67, PPS 68, IDR 65
+```
+
+O `2dc` apareceu 46 vezes na captura, e o fluxo tinha exatamente 46 SPS — é o
+que identifica o marcador como tipo de quadro.
+
+**Concatenar as mensagens antes de olhar destrói a fronteira e some com o
+canal.** Foi o primeiro erro cometido aqui: o fluxo colado não enquadra de jeito
+nenhum e parece formato desconhecido, quando o problema era a análise.
+
+### Verificado de ponta a ponta
+
+`tools/ws_preview.py` conecta, separa por canal, extrai o H.264 a partir do
+primeiro quadro-chave e grava:
+
+```bash
+./tools/ws_preview.py --canais 63 --segundos 8 --extrair 0 --cookie "<sessão>"
+ffplay /tmp/canal0.h264
+```
+
+O `ffprobe` reconhece **H.264 Main, 240×352, yuv420p**, e o `ffmpeg` decodifica
+quadro. O OSD do vídeo traz data, velocidade, fuso `GMT-03:00` e a frase
+`No positioning module` — que confirma por outro caminho o `viled=2` do relato
+de GPS.
+
+Começar a extração antes do SPS entrega ao decodificador quadros que dependem de
+referência que ele não tem, e o resultado é tela verde — parece defeito do vídeo
+e é só ponto de partida errado.
 
 ## Ao vivo pelo N9M
 
@@ -155,10 +196,9 @@ os segundos *depois* do alarme sem esperar o período fechar.
 A ordem é do mais barato para o mais caro, e cada passo prova algo que o
 seguinte precisa.
 
-1. **RTSP na bancada.** Descobrir o caminho do stream por telnet e abrir com
-   `ffplay`. Prova que há vídeo saindo do aparelho, sem escrever uma linha de
-   código. É o teste que separa "nosso código está errado" de "o aparelho não
-   está entregando".
+1. ~~RTSP~~ **WebSocket na bancada — feito.** `tools/ws_preview.py` já entrega
+   os seis canais e um H.264 que o ffmpeg decodifica. É o que separa "nosso
+   código está errado" de "o aparelho não está entregando".
 2. **`REQUESTALIVEVIDEO` pela sonda**, com `IPANDPORT` apontando para uma porta
    nossa que só registra bytes. Prova que o comando desce e que a conexão de
    mídia sobe, sem precisar decodificar quadro nenhum.
