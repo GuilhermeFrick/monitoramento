@@ -1,0 +1,259 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Parede de vídeo — MDVR</title>
+<style>
+  :root {
+    --fundo: #1f1f1f; --painel: #252526; --borda: #3b3b3b;
+    --texto: #d4d4d4; --fraco: #9d9d9d; --marca: #65b0ff;
+    --ok: #89d185; --erro: #f36262;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--fundo); color: var(--texto);
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  h1 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+  #estado { color: var(--fraco); }
+  #estado.ligado { color: var(--ok); }
+  #estado.erro { color: var(--erro); }
+  button {
+    font: inherit; color: var(--texto); background: var(--painel);
+    border: 1px solid var(--borda); border-radius: 4px; padding: 4px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--marca); }
+  .parede {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .camera {
+    background: var(--painel); border: 1px solid var(--borda); border-radius: 6px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .camera figcaption {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 6px 10px; border-bottom: 1px solid var(--borda);
+    font-size: 12px;
+  }
+  .camera .rotulo { color: var(--texto); }
+  .camera .medida { color: var(--fraco); font-variant-numeric: tabular-nums; }
+  /* A proporção vem do próprio vídeo; o fundo preto evita o salto de layout
+     entre a conexão e o primeiro quadro decodificado. */
+  .camera canvas { width: 100%; display: block; background: #000; aspect-ratio: 3 / 4; object-fit: contain; }
+  .camera.sem-sinal canvas { opacity: .25; }
+  footer { margin-top: 14px; color: var(--fraco); font-size: 12px; }
+  code { color: var(--marca); }
+</style>
+
+<header>
+  <h1>Parede de vídeo — MDVR de bancada</h1>
+  <span id="estado">desconectado</span>
+  <button id="alternar">conectar</button>
+  <span id="total" class="medida"></span>
+</header>
+
+<div class="parede" id="parede"></div>
+
+<footer>
+  Cada mensagem traz <code>byte 0</code> = canal e <code>bytes 1–3</code> =
+  <code>2dc</code> quadro-chave · <code>3dc</code>/<code>4dc</code> os demais.
+  A decodificação é H.264 nativa do navegador, via WebCodecs.
+</footer>
+
+<script type="module">
+const CANAIS = 6;
+const parede = document.getElementById("parede");
+const estado = document.getElementById("estado");
+const alternar = document.getElementById("alternar");
+const totalEl = document.getElementById("total");
+
+if (!("VideoDecoder" in window)) {
+  estado.textContent = "este navegador não tem WebCodecs; use Chrome ou Edge";
+  estado.className = "erro";
+  alternar.disabled = true;
+}
+
+/** Um canal: canvas, decodificador e contadores. */
+class Canal {
+  constructor(indice) {
+    this.indice = indice;
+    this.quadros = 0;
+    this.bytes = 0;
+    this.esperandoChave = true;
+    this.decodificador = null;
+
+    const fig = document.createElement("figure");
+    fig.className = "camera sem-sinal";
+    fig.style.margin = "0";
+    fig.innerHTML = `<figcaption>
+        <span class="rotulo">canal ${indice + 1}</span>
+        <span class="medida">—</span>
+      </figcaption>`;
+    this.canvas = document.createElement("canvas");
+    this.ctx = this.canvas.getContext("2d");
+    fig.append(this.canvas);
+    parede.append(fig);
+    this.fig = fig;
+    this.medida = fig.querySelector(".medida");
+  }
+
+  criarDecodificador() {
+    // avc1.4D0029 = Main profile, level 4.1, que é o que o SPS do aparelho
+    // declara (67 4d 00 29). Sem `description`, o WebCodecs espera Annex-B,
+    // que é exatamente o formato que vem no fio.
+    const dec = new VideoDecoder({
+      output: (quadro) => this.desenhar(quadro),
+      error: (erro) => {
+        console.warn(`canal ${this.indice + 1}:`, erro);
+        this.reiniciar();
+      },
+    });
+    dec.configure({ codec: "avc1.4D0029", optimizeForLatency: true });
+    return dec;
+  }
+
+  desenhar(quadro) {
+    if (this.canvas.width !== quadro.displayWidth) {
+      this.canvas.width = quadro.displayWidth;
+      this.canvas.height = quadro.displayHeight;
+      this.canvas.style.aspectRatio = `${quadro.displayWidth} / ${quadro.displayHeight}`;
+    }
+    this.ctx.drawImage(quadro, 0, 0);
+    quadro.close();
+    this.quadros++;
+    this.fig.classList.remove("sem-sinal");
+  }
+
+  /**
+   * Um decodificador que errou não se recupera sozinho, e insistir nele deixa
+   * o canal preto para sempre. Joga fora e espera o próximo quadro-chave.
+   */
+  reiniciar() {
+    try { this.decodificador?.close(); } catch {}
+    this.decodificador = null;
+    this.esperandoChave = true;
+  }
+
+  alimentar(dados, ehChave) {
+    this.bytes += dados.byteLength;
+
+    // Começar num quadro que depende de referência ausente dá tela verde, que
+    // parece defeito do vídeo e é só ponto de partida errado.
+    if (this.esperandoChave && !ehChave) return;
+    this.esperandoChave = false;
+
+    if (!this.decodificador) {
+      if (!ehChave) return;
+      this.decodificador = this.criarDecodificador();
+    }
+    try {
+      this.decodificador.decode(new EncodedVideoChunk({
+        type: ehChave ? "key" : "delta",
+        timestamp: this.quadros * 33_333, // µs; só precisa ser crescente
+        data: dados,
+      }));
+    } catch (erro) {
+      console.warn(`canal ${this.indice + 1} recusou o quadro:`, erro);
+      this.reiniciar();
+    }
+  }
+
+  medir(segundos) {
+    const fps = this.quadros / segundos;
+    const kbps = (this.bytes * 8) / segundos / 1000;
+    this.medida.textContent = this.quadros
+      ? `${fps.toFixed(1)} q/s · ${kbps.toFixed(0)} kbps`
+      : "sem sinal";
+    this.quadros = 0;
+    this.bytes = 0;
+  }
+
+  encerrar() {
+    this.reiniciar();
+    this.fig.classList.add("sem-sinal");
+    this.medida.textContent = "—";
+  }
+}
+
+const canais = Array.from({ length: CANAIS }, (_, i) => new Canal(i));
+let socket = null;
+let mensagens = 0;
+let bytesTotais = 0;
+
+/**
+ * O cabeçalho do aparelho não tem tamanho fixo conhecido, então achamos onde o
+ * H.264 começa pelo start code de Annex-B em vez de contar bytes. É mais
+ * robusto do que fixar um deslocamento que ninguém confirmou.
+ */
+function inicioAnnexB(bytes) {
+  for (let i = 0; i + 3 < Math.min(bytes.length, 256); i++) {
+    if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 0 && bytes[i + 3] === 1) return i;
+    if (bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) return i;
+  }
+  return -1;
+}
+
+function receber(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return;
+  mensagens++;
+  bytesTotais += bytes.length;
+
+  const canal = bytes[0];
+  const marcador = String.fromCharCode(bytes[1], bytes[2], bytes[3]);
+  if (canal >= CANAIS) return;
+
+  const inicio = inicioAnnexB(bytes);
+  if (inicio < 0) return;
+
+  // "2dc" apareceu exatamente tantas vezes quantos SPS havia na captura: é o
+  // marcador de quadro-chave.
+  canais[canal].alimentar(bytes.subarray(inicio), marcador[0] === "2");
+}
+
+function conectar() {
+  estado.textContent = "conectando…";
+  estado.className = "";
+  socket = new WebSocket(`ws://${location.host}/stream`);
+  socket.binaryType = "arraybuffer";
+
+  socket.onopen = () => {
+    estado.textContent = "ligado";
+    estado.className = "ligado";
+    alternar.textContent = "desconectar";
+  };
+  socket.onmessage = (e) => receber(e.data);
+  socket.onerror = () => {
+    estado.textContent = "erro na conexão";
+    estado.className = "erro";
+  };
+  socket.onclose = () => {
+    estado.textContent = "desconectado";
+    estado.className = "";
+    alternar.textContent = "conectar";
+    socket = null;
+    canais.forEach((c) => c.encerrar());
+  };
+}
+
+alternar.onclick = () => (socket ? socket.close() : conectar());
+
+let marcoTempo = performance.now();
+setInterval(() => {
+  const agora = performance.now();
+  const segundos = (agora - marcoTempo) / 1000;
+  marcoTempo = agora;
+  canais.forEach((c) => c.medir(segundos));
+  totalEl.textContent = socket
+    ? `${mensagens} msg · ${(bytesTotais / segundos / 1024).toFixed(0)} KiB/s`
+    : "";
+  mensagens = 0;
+  bytesTotais = 0;
+}, 2000);
+
+conectar();
+</script>
